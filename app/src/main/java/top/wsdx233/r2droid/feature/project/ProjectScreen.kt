@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -175,43 +176,27 @@ fun ProjectScreen(
                         }
                     }
 
-                    HorizontalDivider()
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
                     Text(
                         text = stringResource(R.string.session_tools_title),
                         style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(vertical = 8.dp)
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(bottom = 12.dp)
                     )
 
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
-                        modifier = Modifier.heightIn(max = 260.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.heightIn(max = 280.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         userScrollEnabled = false
                     ) {
                         items(UtilityTool.entries) { tool ->
-                            FilledTonalButton(
-                                onClick = { selectedUtility = tool },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(74.dp),
-                                shape = RoundedCornerShape(18.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(tool.icon, contentDescription = null)
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = stringResource(tool.titleRes),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
+                            UtilityToolCard(
+                                tool = tool,
+                                onClick = { selectedUtility = tool }
+                            )
                         }
                     }
                 }
@@ -450,6 +435,56 @@ fun ProjectScreen(
 
     toolResultDialog?.let { result ->
         ToolResultDialog(result = result, onDismiss = { toolResultDialog = null })
+    }
+}
+
+@Composable
+private fun UtilityToolCard(
+    tool: UtilityTool,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(88.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 背景装饰图标 - 放大并半透明
+            Icon(
+                imageVector = tool.icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
+                modifier = Modifier
+                    .size(72.dp)
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 8.dp, bottom = 8.dp)
+            )
+
+            // 前景内容
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                horizontalAlignment = Alignment.Start,
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Icon(
+                    imageVector = tool.icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(
+                    text = stringResource(tool.titleRes),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 2
+                )
+            }
+        }
     }
 }
 
