@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Use the full original icon for all layers to avoid any masking/theming -->
-    <background android:drawable="@drawable/icon" />
-    <foreground android:drawable="@color/transparent" />
+    <!-- Empty background and foreground - launcher will fall back to legacy mipmap icons -->
+    <!-- Only monochrome layer is provided for themed icons and fluid-cloud surfaces -->
+    <background android:drawable="@android:color/transparent" />
+    <foreground android:drawable="@android:color/transparent" />
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
 </adaptive-icon>

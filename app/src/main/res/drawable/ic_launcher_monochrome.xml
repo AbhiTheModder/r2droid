@@ -4,12 +4,21 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Glyph-only mask with padding for themed icons and OEM fluid-cloud/live surfaces. -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M21.4,29.7L61.7,54 21.4,78.3v-16.2L37.8,54 21.4,45.9z" />
+    <!-- Monochrome icon for themed icons and fluid-cloud surfaces -->
+    <!-- Scaled Android robot outline centered in safe zone -->
+    <group
+        android:translateX="54"
+        android:translateY="54">
+        <group
+            android:scaleX="0.045"
+            android:scaleY="0.045"
+            android:translateX="-512"
+            android:translateY="-512">
 
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M62.1,67.7h27.9v11.9h-27.9z" />
+            <!-- Android robot body outline -->
+            <path
+                android:fillColor="#FFFFFFFF"
+                android:pathData="m656.7,934.7c-14.5,0 -26.3,-12.1 -26.3,-26.9 0,-14.8 11.8,-26.9 26.3,-26.9 14.5,0 26.3,12 26.3,26.9 0,14.8 -11.8,26.9 -26.3,26.9m-290.7,0c-14.5,0 -26.3,-12.1 -26.3,-26.9 0,-14.8 11.8,-26.9 26.3,-26.9 14.5,0 26.3,12 26.3,26.9 0,14.8 -11.8,26.9 -26.3,26.9m300.2,-161.8c0,-0 -19.6,-10 -19.6,-10 -40.7,-19 -86.4,-29.5 -135.2,-29.5 -48.8,0 -94.5,10.6 -135.2,29.5l-53.2,-94.1c-3,-5.3 -9.7,-7.2 -14.9,-4.1 -5.2,3.1 -7,9.9 -4,15.3l52.6,93c-90.3,50.1 -152,143.4 -161,253.7l631.7,0c-9,-110.2 -70.8,-203.6 -161,-253.7" />
+        </group>
+    </group>
 </vector>
