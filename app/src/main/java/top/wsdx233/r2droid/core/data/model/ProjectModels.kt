@@ -18,7 +18,8 @@ data class SavedProject(
     val fileSize: Long,                 // Original binary file size
     val archType: String,               // Architecture type (e.g., arm64, x86)
     val binType: String,                // Binary type (e.g., elf, pe, mach0)
-    val analysisLevel: String = ""      // Analysis level used (aaa, aaaa, etc.)
+    val analysisLevel: String = "",     // Analysis level used (aaa, aaaa, etc.)
+    val ownsBinaryCopy: Boolean = false // Whether binaryPath points to an app/project-owned copy
 ) {
     companion object {
         fun fromJson(json: JSONObject): SavedProject {
@@ -32,7 +33,8 @@ data class SavedProject(
                 fileSize = json.optLong("fileSize", 0L),
                 archType = json.optString("archType", ""),
                 binType = json.optString("binType", ""),
-                analysisLevel = json.optString("analysisLevel", "")
+                analysisLevel = json.optString("analysisLevel", ""),
+                ownsBinaryCopy = json.optBoolean("ownsBinaryCopy", false)
             )
         }
     }
@@ -49,6 +51,7 @@ data class SavedProject(
             put("archType", archType)
             put("binType", binType)
             put("analysisLevel", analysisLevel)
+            put("ownsBinaryCopy", ownsBinaryCopy)
         }
     }
 

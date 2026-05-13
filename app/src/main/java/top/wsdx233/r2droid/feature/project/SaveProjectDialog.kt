@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,11 +32,12 @@ import top.wsdx233.r2droid.util.R2PipeManager
 fun SaveProjectDialog(
     existingProjectId: String?,
     onDismiss: () -> Unit,
-    onSaveNew: (name: String) -> Unit,
+    onSaveNew: (name: String, copyBinary: Boolean) -> Unit,
     onUpdate: (projectId: String) -> Unit
 ) {
     var projectName by remember { mutableStateOf("") }
     var saveAsNew by remember { mutableStateOf(existingProjectId == null) }
+    var copyBinary by remember { mutableStateOf(false) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -88,6 +91,28 @@ fun SaveProjectDialog(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { copyBinary = !copyBinary }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = copyBinary,
+                            onCheckedChange = { copyBinary = it }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(stringResource(R.string.analysis_copy_binary))
+                            Text(
+                                text = stringResource(R.string.analysis_copy_binary_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
         },
@@ -98,7 +123,7 @@ fun SaveProjectDialog(
                         val name = projectName.ifBlank {
                             R2PipeManager.currentFilePath?.let { java.io.File(it).name } ?: "Project"
                         }
-                        onSaveNew(name)
+                        onSaveNew(name, copyBinary)
                     } else {
                         onUpdate(existingProjectId)
                     }

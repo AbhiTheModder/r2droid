@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import top.wsdx233.r2droid.core.data.model.SavedProject
+import top.wsdx233.r2droid.util.ProjectFileUtils
 import top.wsdx233.r2droid.util.R2PipeManager
 import java.io.File
 import java.util.UUID
@@ -100,16 +101,27 @@ class SavedProjectRepository @Inject constructor(@ApplicationContext private val
      */
     suspend fun saveCurrentProject(
         name: String,
-        analysisLevel: String = ""
+        analysisLevel: String = "",
+        copyBinary: Boolean = false,
+        ownsCurrentBinaryCopy: Boolean = false,
+        currentOwnedBinaryPath: String? = null
     ): Result<SavedProject> = withContext(Dispatchers.IO) {
         try {
-            val binaryPath = R2PipeManager.currentFilePath 
+            val currentBinaryPath = R2PipeManager.currentFilePath
                 ?: return@withContext Result.failure(IllegalStateException("No file is currently open"))
-
-            // Generate unique ID
+            // Generate unique ID first so optional binary copies can live inside the project folder.
             val projectId = UUID.randomUUID().toString().take(8)
             val projectDir = File(projectsDir, projectId)
             if (!projectDir.exists()) projectDir.mkdirs()
+
+            val binaryPath = when {
+                copyBinary -> copyBinaryIntoProjectDir(projectDir, currentBinaryPath)
+                ownsCurrentBinaryCopy -> moveOwnedBinaryIntoProjectDir(projectDir, currentOwnedBinaryPath ?: currentBinaryPath)
+                else -> currentBinaryPath
+            }
+            if (binaryPath != currentBinaryPath && R2PipeManager.currentFilePath == currentBinaryPath) {
+                R2PipeManager.updateCurrentFilePath(binaryPath)
+            }
 
             val scriptFile = File(projectDir, SCRIPT_FILENAME)
             val metadataFile = File(projectDir, METADATA_FILENAME)
@@ -147,7 +159,8 @@ class SavedProjectRepository @Inject constructor(@ApplicationContext private val
                 fileSize = fileSize,
                 archType = archType,
                 binType = binType,
-                analysisLevel = analysisLevel
+                analysisLevel = analysisLevel,
+                ownsBinaryCopy = copyBinary || ownsCurrentBinaryCopy
             )
 
             // Save metadata
@@ -209,14 +222,49 @@ class SavedProjectRepository @Inject constructor(@ApplicationContext private val
         }
     }
 
+    private fun copyBinaryIntoProjectDir(projectDir: File, sourcePath: String): String {
+        val source = File(sourcePath)
+        require(source.exists() && source.canRead()) { "Source file is not readable: $sourcePath" }
+        val binDir = File(projectDir, "binary").apply { mkdirs() }
+        val target = ProjectFileUtils.uniqueFile(binDir, source.name.ifBlank { "binary" })
+        source.inputStream().use { input ->
+            target.outputStream().use { output -> input.copyTo(output) }
+        }
+        target.setReadable(true, true)
+        target.setWritable(true, true)
+        return target.absolutePath
+    }
+
+    private fun moveOwnedBinaryIntoProjectDir(projectDir: File, sourcePath: String): String {
+        val source = File(sourcePath)
+        require(source.exists() && source.canRead()) { "Source file is not readable: $sourcePath" }
+        val binDir = File(projectDir, "binary").apply { mkdirs() }
+        val target = ProjectFileUtils.uniqueFile(binDir, source.name.ifBlank { "binary" })
+        val moved = runCatching { source.renameTo(target) }.getOrDefault(false)
+        if (!moved) {
+            source.inputStream().use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+            runCatching { source.delete() }
+        }
+        target.setReadable(true, true)
+        target.setWritable(true, true)
+        return target.absolutePath
+    }
+
     /**
      * Delete a saved project
      */
     suspend fun deleteProject(projectId: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val projectDir = File(projectsDir, projectId)
+            val project = getProjectById(projectId)
+            val copiedBinaryPath = project?.binaryPath
             if (projectDir.exists()) {
                 projectDir.deleteRecursively()
+            }
+            if (project?.ownsBinaryCopy == true && !copiedBinaryPath.isNullOrBlank()) {
+                runCatching { File(copiedBinaryPath).delete() }
             }
 
             // Update index

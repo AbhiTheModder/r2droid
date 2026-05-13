@@ -389,6 +389,13 @@
     <string name="proj_save_update_title">Обновить проект</string>
     <string name="proj_save_update_desc">Сохранить изменения в существующий проект</string>
     <string name="proj_save_new_desc">Сохранить результаты анализа на будущее</string>
+    <string name="proj_save_as_title">Сохранить как</string>
+    <string name="proj_save_as_desc">Создать отдельный сохраненный проект из текущей сессии</string>
+    <string name="proj_export_binary_title">Экспорт бинарного файла</string>
+    <string name="proj_export_binary_desc">Экспортировать текущий открытый бинарный файл в выбранное место</string>
+    <string name="proj_export_binary_success">Бинарный файл экспортирован</string>
+    <string name="proj_export_binary_no_file">Нет открытого бинарного файла</string>
+    <string name="proj_export_binary_error_write">Не удалось записать экспортированный бинарный файл</string>
     
     <string name="proj_term_desc">Открыть терминал с окружением radare2</string>
 
@@ -449,6 +456,12 @@
     <string name="analysis_custom_cmd_hint">напр. aa</string>
     <string name="analysis_startup_options">Опции запуска</string>
     <string name="analysis_writable_mode">Открыть в режиме записи (-w)</string>
+    <string name="analysis_project_options">Параметры проекта</string>
+    <string name="analysis_save_as_project">Сохранить как проект</string>
+    <string name="analysis_save_as_project_desc">Автоматически сохранить анализ после завершения</string>
+    <string name="analysis_project_name_label">Имя проекта</string>
+    <string name="analysis_copy_binary">Скопировать копию бинарного файла</string>
+    <string name="analysis_copy_binary_desc">Открыть и сохранить копию проекта вместо исходного файла</string>
     <string name="analysis_startup_flags_label">Дополнительные флаги запуска</string>
     <string name="analysis_startup_flags_hint">-n -h</string>
     <string name="analysis_start_btn">Начать анализ</string>

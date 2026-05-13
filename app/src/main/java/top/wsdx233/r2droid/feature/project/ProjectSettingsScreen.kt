@@ -1,5 +1,7 @@
 package top.wsdx233.r2droid.feature.project
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +22,8 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Architecture
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -64,11 +68,13 @@ fun ProjectSettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val saveState by viewModel.saveProjectState.collectAsState()
+    val exportBinaryState by viewModel.exportBinaryState.collectAsState()
     val reconnectState by viewModel.reconnectState.collectAsState()
     val staticProjectLoadState by r2fridaViewModel.staticProjectLoadState.collectAsState()
     val fridaMappings by r2fridaViewModel.mappings.collectAsState()
     val isFridaSession = R2PipeManager.isR2FridaSession
     var showSaveDialog by remember { mutableStateOf(false) }
+    var showSaveAsDialog by remember { mutableStateOf(false) }
     var showLoadStaticProjectDialog by remember { mutableStateOf(false) }
     var savedProjects by remember { mutableStateOf<List<SavedProject>>(emptyList()) }
     var loadingSavedProjects by remember { mutableStateOf(false) }
@@ -76,6 +82,12 @@ fun ProjectSettingsScreen(
     var showExportReport by remember { mutableStateOf(false) }
     var showAnalysis by remember { mutableStateOf(false) }
     var showSwitchArch by remember { mutableStateOf(false) }
+
+    val binaryExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        uri?.let { viewModel.onEvent(ProjectEvent.ExportBinaryCopy(it)) }
+    }
 
     if (showExportReport) {
         ExportReportScreen(onDismiss = { showExportReport = false })
@@ -142,6 +154,28 @@ fun ProjectSettingsScreen(
         }
     }
 
+    androidx.compose.runtime.LaunchedEffect(exportBinaryState) {
+        when (exportBinaryState) {
+            is ExportBinaryState.Success -> {
+                android.widget.Toast.makeText(
+                    context,
+                    (exportBinaryState as ExportBinaryState.Success).message,
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                viewModel.resetExportBinaryState()
+            }
+            is ExportBinaryState.Error -> {
+                android.widget.Toast.makeText(
+                    context,
+                    (exportBinaryState as ExportBinaryState.Error).message,
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                viewModel.resetExportBinaryState()
+            }
+            else -> Unit
+        }
+    }
+
     androidx.compose.runtime.LaunchedEffect(reconnectState) {
         when (reconnectState) {
             is ReconnectState.Success -> {
@@ -192,14 +226,27 @@ fun ProjectSettingsScreen(
         SaveProjectDialog(
             existingProjectId = viewModel.getCurrentProjectId(),
             onDismiss = { showSaveDialog = false },
-            onSaveNew = { name ->
-                viewModel.onEvent(ProjectEvent.SaveProject(name))
+            onSaveNew = { name, copyBinary ->
+                viewModel.onEvent(ProjectEvent.SaveProject(name, copyBinary = copyBinary))
                 showSaveDialog = false
             },
             onUpdate = { projectId ->
                 viewModel.onEvent(ProjectEvent.UpdateProject(projectId))
                 showSaveDialog = false
             }
+        )
+    }
+
+    // Save as dialog: always creates a new saved project
+    if (showSaveAsDialog && !isFridaSession) {
+        SaveProjectDialog(
+            existingProjectId = null,
+            onDismiss = { showSaveAsDialog = false },
+            onSaveNew = { name, copyBinary ->
+                viewModel.onEvent(ProjectEvent.SaveProject(name, copyBinary = copyBinary))
+                showSaveAsDialog = false
+            },
+            onUpdate = {}
         )
     }
     
@@ -250,56 +297,48 @@ fun ProjectSettingsScreen(
                 style = MaterialTheme.typography.titleMedium
             )
 
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(enabled = saveState !is SaveProjectState.Saving) {
-                        showSaveDialog = true
-                    },
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    if (saveState is SaveProjectState.Saving) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.padding(8.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Build,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
+            ProjectActionCard(
+                title = if (R2PipeManager.currentProjectId != null)
+                    stringResource(R.string.proj_save_update_title)
+                else
+                    stringResource(top.wsdx233.r2droid.R.string.project_save_title),
+                description = if (R2PipeManager.currentProjectId != null)
+                    stringResource(R.string.proj_save_update_desc)
+                else
+                    stringResource(R.string.proj_save_new_desc),
+                icon = Icons.Default.Build,
+                loading = saveState is SaveProjectState.Saving,
+                enabled = saveState !is SaveProjectState.Saving,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                onClick = { showSaveDialog = true }
+            )
 
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (R2PipeManager.currentProjectId != null)
-                                stringResource(R.string.proj_save_update_title)
-                            else
-                                stringResource(top.wsdx233.r2droid.R.string.project_save_title),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            text = if (R2PipeManager.currentProjectId != null)
-                                stringResource(R.string.proj_save_update_desc)
-                            else
-                                stringResource(R.string.proj_save_new_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        )
-                    }
+            ProjectActionCard(
+                title = stringResource(R.string.proj_save_as_title),
+                description = stringResource(R.string.proj_save_as_desc),
+                icon = Icons.Default.ContentCopy,
+                loading = saveState is SaveProjectState.Saving,
+                enabled = saveState !is SaveProjectState.Saving,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                onClick = { showSaveAsDialog = true }
+            )
+
+            val currentBinaryPath = R2PipeManager.currentFilePath
+            ProjectActionCard(
+                title = stringResource(R.string.proj_export_binary_title),
+                description = stringResource(R.string.proj_export_binary_desc),
+                icon = Icons.Default.Download,
+                loading = exportBinaryState is ExportBinaryState.Exporting,
+                enabled = currentBinaryPath != null && exportBinaryState !is ExportBinaryState.Exporting,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                onClick = {
+                    val name = currentBinaryPath?.let { java.io.File(it).name.ifBlank { "binary" } } ?: "binary"
+                    binaryExportLauncher.launch(name)
                 }
-            }
+            )
         } else {
             Text(
                 text = stringResource(R.string.frida_load_static_project_title),
@@ -657,6 +696,59 @@ fun ProjectSettingsScreen(
                         color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectActionCard(
+    title: String,
+    description: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    loading: Boolean = false,
+    enabled: Boolean = true,
+    containerColor: androidx.compose.ui.graphics.Color,
+    contentColor: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { onClick() },
+        colors = CardDefaults.cardColors(containerColor = containerColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.padding(8.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = contentColor
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = contentColor
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = contentColor.copy(alpha = if (enabled) 0.7f else 0.45f)
+                )
             }
         }
     }

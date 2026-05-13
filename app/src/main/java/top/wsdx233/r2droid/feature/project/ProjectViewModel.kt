@@ -24,6 +24,7 @@ import top.wsdx233.r2droid.core.data.prefs.SettingsManager
 import top.wsdx233.r2droid.feature.bininfo.data.BinInfoRepository
 import top.wsdx233.r2droid.feature.project.data.ProjectRepository
 import top.wsdx233.r2droid.feature.project.data.SavedProjectRepository
+import top.wsdx233.r2droid.util.ProjectFileUtils
 import top.wsdx233.r2droid.util.R2PipeManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -60,12 +61,24 @@ sealed interface ProjectEvent {
     object Initialize : ProjectEvent
     object StartRestoreSession : ProjectEvent
     object StartCustomCommandSession : ProjectEvent
-    data class StartAnalysisSession(val cmd: String, val writable: Boolean, val flags: String) : ProjectEvent
+    data class StartAnalysisSession(
+        val cmd: String,
+        val writable: Boolean,
+        val flags: String,
+        val saveAsProject: Boolean = false,
+        val projectName: String = "",
+        val copyBinary: Boolean = false
+    ) : ProjectEvent
     object ReconnectCurrentSession : ProjectEvent
     object ClearLogs : ProjectEvent
     data class ExecuteCommand(val cmd: String, val callback: (String) -> Unit) : ProjectEvent
-    data class SaveProject(val name: String, val analysisLevel: String = "") : ProjectEvent
+    data class SaveProject(
+        val name: String,
+        val analysisLevel: String = "",
+        val copyBinary: Boolean = false
+    ) : ProjectEvent
     data class UpdateProject(val projectId: String) : ProjectEvent
+    data class ExportBinaryCopy(val uri: android.net.Uri) : ProjectEvent
     object ResetSaveState : ProjectEvent
     object ResetReconnectState : ProjectEvent
     object ClearFunctionsCache : ProjectEvent
@@ -105,6 +118,13 @@ sealed class SaveProjectState {
     object Saving : SaveProjectState()
     data class Success(val message: String) : SaveProjectState()
     data class Error(val message: String) : SaveProjectState()
+}
+
+sealed class ExportBinaryState {
+    object Idle : ExportBinaryState()
+    object Exporting : ExportBinaryState()
+    data class Success(val message: String) : ExportBinaryState()
+    data class Error(val message: String) : ExportBinaryState()
 }
 
 sealed class ReconnectState {
@@ -186,6 +206,9 @@ class ProjectViewModel @Inject constructor(
     // Save project state
     private val _saveProjectState = MutableStateFlow<SaveProjectState>(SaveProjectState.Idle)
     val saveProjectState: StateFlow<SaveProjectState> = _saveProjectState.asStateFlow()
+
+    private val _exportBinaryState = MutableStateFlow<ExportBinaryState>(ExportBinaryState.Idle)
+    val exportBinaryState: StateFlow<ExportBinaryState> = _exportBinaryState.asStateFlow()
 
     private val _reconnectState = MutableStateFlow<ReconnectState>(ReconnectState.Idle)
     val reconnectState: StateFlow<ReconnectState> = _reconnectState.asStateFlow()
@@ -365,7 +388,14 @@ class ProjectViewModel @Inject constructor(
             is ProjectEvent.Initialize -> initialize()
             is ProjectEvent.StartRestoreSession -> startRestoreSession()
             is ProjectEvent.StartCustomCommandSession -> startCustomCommandSession()
-            is ProjectEvent.StartAnalysisSession -> startAnalysisSession(event.cmd, event.writable, event.flags)
+            is ProjectEvent.StartAnalysisSession -> startAnalysisSession(
+                event.cmd,
+                event.writable,
+                event.flags,
+                event.saveAsProject,
+                event.projectName,
+                event.copyBinary
+            )
             is ProjectEvent.ReconnectCurrentSession -> reconnectCurrentSession()
             is ProjectEvent.JumpToAddress -> jumpToAddress(event.address)
             is ProjectEvent.UpdateCursor -> updateCursor(event.address)
@@ -385,8 +415,9 @@ class ProjectViewModel @Inject constructor(
             is ProjectEvent.LoadGraph -> loadGraph(event.graphType)
             is ProjectEvent.ClearLogs -> clearLogs()
             is ProjectEvent.ExecuteCommand -> executeCommand(event.cmd, event.callback)
-            is ProjectEvent.SaveProject -> saveProject(event.name, event.analysisLevel)
+            is ProjectEvent.SaveProject -> saveProject(event.name, event.analysisLevel, event.copyBinary)
             is ProjectEvent.UpdateProject -> updateProject(event.projectId)
+            is ProjectEvent.ExportBinaryCopy -> exportBinaryCopy(event.uri)
             is ProjectEvent.ResetSaveState -> resetSaveState()
             is ProjectEvent.ResetReconnectState -> resetReconnectState()
             is ProjectEvent.ClearFunctionsCache -> clearFunctionsCache()
@@ -638,11 +669,27 @@ class ProjectViewModel @Inject constructor(
         }
     }
 
-    fun startAnalysisSession(analysisCmd: String, writable: Boolean, startupFlags: String) {
+    fun startAnalysisSession(
+        analysisCmd: String,
+        writable: Boolean,
+        startupFlags: String,
+        saveAsProject: Boolean = false,
+        projectName: String = "",
+        copyBinary: Boolean = false
+    ) {
          val currentState = _uiState.value
          if (currentState is ProjectUiState.Configuring) {
              // 立即消费 pending 路径，避免 open() 过程中触发的 Initialize 将界面重置回配置/分析页
              R2PipeManager.pendingFilePath = null
+             R2PipeManager.pendingAutoSaveProject = if (saveAsProject) {
+                 R2PipeManager.PendingAutoSaveProject(
+                     name = projectName.ifBlank { java.io.File(currentState.filePath).name.ifBlank { "Project" } },
+                     analysisLevel = analysisCmd,
+                     copyBinary = copyBinary
+                 )
+             } else {
+                 null
+             }
 
              viewModelScope.launch {
                  _uiState.value = ProjectUiState.Analyzing
@@ -651,9 +698,26 @@ class ProjectViewModel @Inject constructor(
                  clearLogs()
                  
                  val flags = if (writable) "-w $startupFlags" else startupFlags
+                 val openFilePath = if (copyBinary) {
+                     runCatching {
+                         ProjectFileUtils.copyFileToProjectBinaries(
+                             context = context,
+                             sourcePath = currentState.filePath,
+                             preferredName = java.io.File(currentState.filePath).name
+                         ).absolutePath
+                     }.getOrElse { error ->
+                         R2PipeManager.pendingAutoSaveProject = null
+                         _uiState.value = ProjectUiState.Error(
+                             error.message ?: context.getString(top.wsdx233.r2droid.R.string.home_error_open_file)
+                         )
+                         return@launch
+                     }
+                 } else {
+                     currentState.filePath
+                 }
                  
                  // Open Session
-                 val openResult = R2PipeManager.open(context, currentState.filePath, flags.trim())
+                 val openResult = R2PipeManager.open(context, openFilePath, flags.trim())
 
                  if (openResult.isSuccess) {
                      // Run Analysis
@@ -678,8 +742,19 @@ class ProjectViewModel @Inject constructor(
                      (_uiState.value as? ProjectUiState.Success)?.let {
                          _uiState.value = it.copy(cursorAddress = currentOffset)
                      }
+
+                     R2PipeManager.pendingAutoSaveProject?.let { pending ->
+                         saveProject(
+                             name = pending.name,
+                             analysisLevel = pending.analysisLevel,
+                             copyBinary = false,
+                             ownsCurrentBinaryCopy = pending.copyBinary,
+                             currentOwnedBinaryPath = if (pending.copyBinary) openFilePath else null
+                         )
+                     }
                      
                  } else {
+                     R2PipeManager.pendingAutoSaveProject = null
                      _uiState.value = ProjectUiState.Error(openResult.exceptionOrNull()?.message ?: "Unknown error")
                  }
              }
@@ -1206,13 +1281,25 @@ class ProjectViewModel @Inject constructor(
      * @param name Display name for the project
      * @param analysisLevel The analysis level used
      */
-    fun saveProject(name: String, analysisLevel: String = "") {
+    fun saveProject(
+        name: String,
+        analysisLevel: String = "",
+        copyBinary: Boolean = false,
+        ownsCurrentBinaryCopy: Boolean = false,
+        currentOwnedBinaryPath: String? = null
+    ) {
         val repo = savedProjectRepository
         
         viewModelScope.launch {
             _saveProjectState.value = SaveProjectState.Saving
             
-            val result = repo.saveCurrentProject(name, analysisLevel)
+            val result = repo.saveCurrentProject(
+                name = name,
+                analysisLevel = analysisLevel,
+                copyBinary = copyBinary,
+                ownsCurrentBinaryCopy = ownsCurrentBinaryCopy,
+                currentOwnedBinaryPath = currentOwnedBinaryPath
+            )
             
             if (result.isSuccess) {
                 val project = result.getOrNull()
@@ -1220,11 +1307,13 @@ class ProjectViewModel @Inject constructor(
                 if (project != null) {
                     R2PipeManager.currentProjectId = project.id
                 }
+                R2PipeManager.pendingAutoSaveProject = null
                 R2PipeManager.isDirtyAfterSave = false
-                _saveProjectState.value = SaveProjectState.Success("Project saved successfully")
+                _saveProjectState.value = SaveProjectState.Success(context.getString(top.wsdx233.r2droid.R.string.project_save_success))
             } else {
+                R2PipeManager.pendingAutoSaveProject = null
                 _saveProjectState.value = SaveProjectState.Error(
-                    result.exceptionOrNull()?.message ?: "Failed to save project"
+                    result.exceptionOrNull()?.message ?: context.getString(top.wsdx233.r2droid.R.string.project_save_error)
                 )
             }
         }
@@ -1245,10 +1334,10 @@ class ProjectViewModel @Inject constructor(
 
             if (result.isSuccess) {
                 R2PipeManager.isDirtyAfterSave = false
-                _saveProjectState.value = SaveProjectState.Success("Project updated successfully")
+                _saveProjectState.value = SaveProjectState.Success(context.getString(top.wsdx233.r2droid.R.string.project_update_success))
             } else {
                 _saveProjectState.value = SaveProjectState.Error(
-                    result.exceptionOrNull()?.message ?: "Failed to update project"
+                    result.exceptionOrNull()?.message ?: context.getString(top.wsdx233.r2droid.R.string.project_save_error)
                 )
             }
         }
@@ -1263,6 +1352,39 @@ class ProjectViewModel @Inject constructor(
 
     fun resetReconnectState() {
         _reconnectState.value = ReconnectState.Idle
+    }
+
+    fun resetExportBinaryState() {
+        _exportBinaryState.value = ExportBinaryState.Idle
+    }
+
+    fun exportBinaryCopy(uri: android.net.Uri) {
+        val sourcePath = R2PipeManager.currentFilePath
+        if (sourcePath.isNullOrBlank()) {
+            _exportBinaryState.value = ExportBinaryState.Error(
+                context.getString(top.wsdx233.r2droid.R.string.proj_export_binary_no_file)
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _exportBinaryState.value = ExportBinaryState.Exporting
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        java.io.File(sourcePath).inputStream().use { input -> input.copyTo(output) }
+                    } ?: throw IllegalStateException(context.getString(top.wsdx233.r2droid.R.string.proj_export_binary_error_write))
+                }
+            }
+            _exportBinaryState.value = if (result.isSuccess) {
+                ExportBinaryState.Success(context.getString(top.wsdx233.r2droid.R.string.proj_export_binary_success))
+            } else {
+                ExportBinaryState.Error(
+                    result.exceptionOrNull()?.message
+                        ?: context.getString(top.wsdx233.r2droid.R.string.proj_export_binary_error_write)
+                )
+            }
+        }
     }
 
     override fun onCleared() {

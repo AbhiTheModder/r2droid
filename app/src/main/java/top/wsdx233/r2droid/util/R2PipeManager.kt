@@ -85,6 +85,15 @@ object R2PipeManager {
     
     // 待处理的项目 ID，用于关联已保存的项目（便于后续更新保存）
     var pendingProjectId: String? = null
+
+    // 打开新文件后自动另存为项目（分析完成后执行），由分析配置页设置
+    data class PendingAutoSaveProject(
+        val name: String,
+        val analysisLevel: String,
+        val copyBinary: Boolean
+    )
+
+    var pendingAutoSaveProject: PendingAutoSaveProject? = null
     
     // 当前已打开的文件路径（active session）
     val currentFilePath: String?
@@ -123,6 +132,16 @@ object R2PipeManager {
                 rawArgs = session.customCommand
             )
         }
+
+    fun updateCurrentFilePath(path: String) {
+        val id = _activeSessionId.value ?: return
+        val session = _sessions.value[id] ?: return
+        val updated = session.copy(
+            projectPath = path,
+            projectInfo = buildProjectInfo(path, session.customCommand)
+        )
+        _sessions.value = _sessions.value.toMutableMap().apply { put(id, updated) }
+    }
 
     /**
      * 状态封装类

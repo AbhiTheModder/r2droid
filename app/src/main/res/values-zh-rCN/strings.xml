@@ -357,6 +357,13 @@
     <string name="proj_save_update_title">更新项目</string>
     <string name="proj_save_update_desc">保存更改到现有项目</string>
     <string name="proj_save_new_desc">保存分析结果以便稍后查看</string>
+    <string name="proj_save_as_title">另存为</string>
+    <string name="proj_save_as_desc">从当前会话创建一个独立的新项目</string>
+    <string name="proj_export_binary_title">导出二进制文件</string>
+    <string name="proj_export_binary_desc">将当前打开的二进制文件导出到你选择的位置</string>
+    <string name="proj_export_binary_success">二进制文件已导出</string>
+    <string name="proj_export_binary_no_file">当前没有打开的二进制文件</string>
+    <string name="proj_export_binary_error_write">写入导出的二进制文件失败</string>
     
     <string name="proj_term_desc">打开带有 radare2 环境的终端</string>
 
@@ -416,6 +423,12 @@
     <string name="analysis_custom_cmd_hint">例如: aa</string>
     <string name="analysis_startup_options">启动选项</string>
     <string name="analysis_writable_mode">以可写模式打开 (-w)</string>
+    <string name="analysis_project_options">项目选项</string>
+    <string name="analysis_save_as_project">保存为项目</string>
+    <string name="analysis_save_as_project_desc">分析完成后自动保存当前会话</string>
+    <string name="analysis_project_name_label">项目名称</string>
+    <string name="analysis_copy_binary">复制二进制文件副本</string>
+    <string name="analysis_copy_binary_desc">打开并保存一份项目管理的副本，不依赖原始文件</string>
     <string name="analysis_startup_flags_label">附加启动参数</string>
     <string name="analysis_startup_flags_hint">-n -h</string>
     <string name="analysis_start_btn">开始分析</string>

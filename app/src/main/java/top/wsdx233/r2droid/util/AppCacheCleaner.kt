@@ -71,6 +71,8 @@ object AppCacheCleaner {
             savedProjectBinaryPaths(context)
                 .map(::normalizePath)
                 .forEach(::add)
+
+            add(normalizePath(ProjectFileUtils.projectBinariesDir(context).absolutePath))
         }
     }
 

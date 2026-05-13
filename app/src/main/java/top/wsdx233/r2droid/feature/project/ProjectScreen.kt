@@ -389,8 +389,17 @@ fun ProjectScreen(
                     } else {
                         AnalysisConfigScreen(
                             filePath = state.filePath,
-                            onStartAnalysis = { cmd, writable, flags ->
-                                viewModel.onEvent(ProjectEvent.StartAnalysisSession(cmd, writable, flags))
+                            onStartAnalysis = { cmd, writable, flags, saveAsProject, projectName, copyBinary ->
+                                viewModel.onEvent(
+                                    ProjectEvent.StartAnalysisSession(
+                                        cmd = cmd,
+                                        writable = writable,
+                                        flags = flags,
+                                        saveAsProject = saveAsProject,
+                                        projectName = projectName,
+                                        copyBinary = copyBinary
+                                    )
+                                )
                             }
                         )
                     }

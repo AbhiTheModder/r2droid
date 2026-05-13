@@ -413,6 +413,13 @@
     <string name="proj_save_update_title">Update Project</string>
     <string name="proj_save_update_desc">Save changes to existing project</string>
     <string name="proj_save_new_desc">Save analysis results for later</string>
+    <string name="proj_save_as_title">Save As</string>
+    <string name="proj_save_as_desc">Create a separate saved project from the current session</string>
+    <string name="proj_export_binary_title">Export Binary File</string>
+    <string name="proj_export_binary_desc">Export the currently opened binary to a location you choose</string>
+    <string name="proj_export_binary_success">Binary exported</string>
+    <string name="proj_export_binary_no_file">No binary file is currently open</string>
+    <string name="proj_export_binary_error_write">Failed to write exported binary</string>
     
     <string name="proj_term_desc">Open shell terminal with radare2 environment</string>
 
@@ -472,6 +479,12 @@
     <string name="analysis_custom_cmd_hint">e.g. aa</string>
     <string name="analysis_startup_options">Startup Options</string>
     <string name="analysis_writable_mode">Open in Writable Mode (-w)</string>
+    <string name="analysis_project_options">Project Options</string>
+    <string name="analysis_save_as_project">Save as project</string>
+    <string name="analysis_save_as_project_desc">Automatically save this analysis after it finishes</string>
+    <string name="analysis_project_name_label">Project name</string>
+    <string name="analysis_copy_binary">Copy binary file copy</string>
+    <string name="analysis_copy_binary_desc">Open and save a project-owned copy instead of relying on the original file</string>
     <string name="analysis_startup_flags_label">Additional Startup Flags</string>
     <string name="analysis_startup_flags_hint">-n -h</string>
     <string name="analysis_start_btn">Start Analysis</string>

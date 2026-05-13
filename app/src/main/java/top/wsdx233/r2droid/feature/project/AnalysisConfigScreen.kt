@@ -40,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -66,12 +67,25 @@ import kotlin.math.roundToLong
 @Composable
 fun AnalysisConfigScreen(
     filePath: String,
-    onStartAnalysis: (cmd: String, writable: Boolean, flags: String) -> Unit
+    onStartAnalysis: (
+        cmd: String,
+        writable: Boolean,
+        flags: String,
+        saveAsProject: Boolean,
+        projectName: String,
+        copyBinary: Boolean
+    ) -> Unit
 ) {
+    val defaultProjectName = remember(filePath) {
+        java.io.File(filePath).name.ifBlank { "Project" }
+    }
     var selectedLevel by remember { mutableStateOf("aaa") }
     var customCmd by remember { mutableStateOf("") }
     var isWritable by remember { mutableStateOf(false) }
     var customFlags by remember { mutableStateOf("") }
+    var saveAsProject by remember(filePath) { mutableStateOf(false) }
+    var projectName by remember(filePath) { mutableStateOf(defaultProjectName) }
+    var copyBinary by remember(filePath) { mutableStateOf(false) }
     
     val context = LocalContext.current
     var fileSize by remember { mutableStateOf(0L) }
@@ -303,6 +317,67 @@ fun AnalysisConfigScreen(
             }
             
             HorizontalDivider()
+
+            // Project Options
+            Text(stringResource(R.string.analysis_project_options), style = MaterialTheme.typography.titleMedium)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        val enabled = !saveAsProject
+                        saveAsProject = enabled
+                        if (enabled && projectName.isBlank()) projectName = defaultProjectName
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.analysis_save_as_project))
+                    Text(
+                        text = stringResource(R.string.analysis_save_as_project_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = saveAsProject,
+                    onCheckedChange = { enabled ->
+                        saveAsProject = enabled
+                        if (enabled && projectName.isBlank()) projectName = defaultProjectName
+                    }
+                )
+            }
+
+            if (saveAsProject) {
+                OutlinedTextField(
+                    value = projectName,
+                    onValueChange = { projectName = it },
+                    label = { Text(stringResource(R.string.analysis_project_name_label)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { copyBinary = !copyBinary },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.analysis_copy_binary))
+                    Text(
+                        text = stringResource(R.string.analysis_copy_binary_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = copyBinary, onCheckedChange = { copyBinary = it })
+            }
+
+            HorizontalDivider()
             
             // Startup Options
             Text(stringResource(R.string.analysis_startup_options), style = MaterialTheme.typography.titleMedium)
@@ -326,7 +401,14 @@ fun AnalysisConfigScreen(
             Button(
                 onClick = {
                     val finalCmd = if (selectedLevel == "custom") customCmd else selectedLevel
-                    onStartAnalysis(finalCmd, isWritable, customFlags)
+                    onStartAnalysis(
+                        finalCmd,
+                        isWritable,
+                        customFlags,
+                        saveAsProject,
+                        projectName.ifBlank { defaultProjectName },
+                        copyBinary
+                    )
                 },
                 modifier = Modifier.fillMaxWidth().height(56.dp)
             ) {

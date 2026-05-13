@@ -82,6 +82,7 @@ class HomeViewModel : ViewModel() {
                 if (filePath != null) {
                     R2PipeManager.pendingFilePath = filePath
                     R2PipeManager.pendingRestoreFlags = null
+                    R2PipeManager.pendingAutoSaveProject = null
                     if (SettingsManager.useProotMode && !top.wsdx233.r2droid.util.ProotInstaller.isEnvironmentReady(context)) {
                         _uiEvent.send(HomeUiEvent.ShowMessage(context.getString(R.string.proot_setup_required_message)))
                         _uiEvent.send(HomeUiEvent.NavigateToProotSetup)
@@ -123,6 +124,7 @@ class HomeViewModel : ViewModel() {
                 R2PipeManager.pendingFilePath = project.binaryPath
                 R2PipeManager.pendingRestoreFlags = project.scriptPath  // Store script path only
                 R2PipeManager.pendingProjectId = project.id
+                R2PipeManager.pendingAutoSaveProject = null
 
                 if (SettingsManager.useProotMode && !top.wsdx233.r2droid.util.ProotInstaller.isEnvironmentReady(context)) {
                     _uiEvent.send(HomeUiEvent.ShowMessage(context.getString(R.string.proot_setup_required_message)))
