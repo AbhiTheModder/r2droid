@@ -859,6 +859,8 @@
     <string name="settings_http_port_desc">(开启HTTP模式时) r2 HTTP 服务端口 (1024-65535)</string>
     <string name="settings_keep_alive">常驻通知</string>
     <string name="settings_keep_alive_desc">分析期间保持应用在后台运行</string>
+    <string name="settings_fluid_cloud_notification">流体云通知</string>
+    <string name="settings_fluid_cloud_notification_desc">常驻通知使用 Android 实时/流体云样式。关闭后使用普通常驻通知。</string>
     <string name="settings_ignore_battery">忽略电池优化</string>
     <string name="settings_ignore_battery_desc">请求系统不限制本应用</string>
     <string name="settings_ignore_battery_already">已设为不受限</string>
@@ -867,6 +869,17 @@
     <string name="keep_alive_channel_name">后台分析</string>
     <string name="keep_alive_notification_title">R2Droid 运行中</string>
     <string name="keep_alive_notification_text">分析会话进行中</string>
+    <string name="settings_terminal_launch_mode">终端打开方式</string>
+    <string name="settings_terminal_launch_mode_desc">启用 Proot 后，打开终端时：%1$s</string>
+    <string name="terminal_launch_ask_title">每次都询问</string>
+    <string name="terminal_launch_dialog_title">选择终端环境</string>
+    <string name="terminal_launch_dialog_desc">当前已开启 Proot。请选择本次打开终端时进入 Ubuntu proot 环境，还是使用 Android 系统终端。</string>
+    <string name="terminal_launch_proot_title">Proot 终端</string>
+    <string name="terminal_launch_proot_desc">进入已配置的 Ubuntu proot 环境，使用其中的 radare2 工具。</string>
+    <string name="terminal_launch_system_title">系统终端</string>
+    <string name="terminal_launch_system_desc">使用 Android shell 和内置 radare2 环境，不进入 proot。</string>
+    <string name="terminal_launch_do_not_ask_again">不再询问</string>
+    <string name="terminal_launch_confirm">打开终端</string>
 
     <string name="proot_setup_title">Proot 环境安装</string>
     <string name="proot_setup_preparing">正在准备 Ubuntu 环境...</string>

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.FontDownload
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -67,7 +68,6 @@ import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.MainScope
 import org.json.JSONArray
 import org.json.JSONObject
-import top.wsdx233.r2droid.activity.TerminalActivity
 import top.wsdx233.r2droid.core.ui.dialogs.ProotInstallDialog
 import top.wsdx233.r2droid.service.KeepAliveService
 import top.wsdx233.r2droid.util.AppCacheCleaner
@@ -75,6 +75,7 @@ import top.wsdx233.r2droid.util.AppVariant
 import top.wsdx233.r2droid.util.DocumentsUiOpenDocumentTreeContract
 import top.wsdx233.r2droid.util.ProotInstaller
 import top.wsdx233.r2droid.util.ProotRootfsCatalog
+import top.wsdx233.r2droid.util.TerminalLauncher
 import top.wsdx233.r2droid.util.UpdateManager
 import java.io.File
 
@@ -207,6 +208,12 @@ class SettingsViewModel : ViewModel() {
 
     private val _keepAlive = MutableStateFlow(SettingsManager.keepAliveNotification)
     val keepAlive = _keepAlive.asStateFlow()
+
+    private val _useFluidCloudNotification = MutableStateFlow(SettingsManager.useFluidCloudNotification)
+    val useFluidCloudNotification = _useFluidCloudNotification.asStateFlow()
+
+    private val _terminalLaunchMode = MutableStateFlow(SettingsManager.terminalLaunchMode)
+    val terminalLaunchMode = _terminalLaunchMode.asStateFlow()
 
     private val _autoCheckUpdates = MutableStateFlow(SettingsManager.autoCheckUpdates)
     val autoCheckUpdates = _autoCheckUpdates.asStateFlow()
@@ -395,6 +402,19 @@ class SettingsViewModel : ViewModel() {
         }
     }
 
+    fun setUseFluidCloudNotification(context: Context, value: Boolean) {
+        SettingsManager.useFluidCloudNotification = value
+        _useFluidCloudNotification.value = value
+        if (SettingsManager.keepAliveNotification) {
+            KeepAliveService.start(context)
+        }
+    }
+
+    fun setTerminalLaunchMode(value: String) {
+        SettingsManager.terminalLaunchMode = value
+        _terminalLaunchMode.value = SettingsManager.terminalLaunchMode
+    }
+
     fun setAutoCheckUpdates(value: Boolean) {
         SettingsManager.autoCheckUpdates = value
         _autoCheckUpdates.value = value
@@ -419,12 +439,14 @@ class SettingsViewModel : ViewModel() {
         SettingsManager.decompilerDefault = "r2ghidra"
         SettingsManager.maxLogEntries = 100
         SettingsManager.keepAliveNotification = true
+        SettingsManager.useFluidCloudNotification = true
         SettingsManager.autoCheckUpdates = true
         SettingsManager.menuAtTouch = true
         SettingsManager.aiEnabled = true
         SettingsManager.aiOutputTruncateLimit = 100000
         SettingsManager.useHttpMode = false
         SettingsManager.useProotMode = false
+        SettingsManager.terminalLaunchMode = SettingsManager.TERMINAL_LAUNCH_MODE_PROOT
         SettingsManager.prootBuildMode = "auto"
         SettingsManager.prootCustomCommand = ""
         SettingsManager.prootRootfsAlias = "ubuntu"
@@ -442,12 +464,14 @@ class SettingsViewModel : ViewModel() {
         _decompilerDefault.value = "r2ghidra"
         _maxLogEntries.value = 100
         _keepAlive.value = true
+        _useFluidCloudNotification.value = true
         _autoCheckUpdates.value = true
         _menuAtTouch.value = true
         _aiEnabled.value = true
         _aiOutputTruncateLimit.value = 100000
         _useHttpMode.value = SettingsManager.useHttpMode
         _useProotMode.value = SettingsManager.useProotMode
+        _terminalLaunchMode.value = SettingsManager.terminalLaunchMode
         _prootBuildMode.value = SettingsManager.prootBuildMode
         _prootCustomCommand.value = SettingsManager.prootCustomCommand
         _prootRootfsAlias.value = SettingsManager.prootRootfsAlias
@@ -476,6 +500,8 @@ fun SettingsScreen(
     val decompilerDefault by viewModel.decompilerDefault.collectAsState()
     val maxLogEntries by viewModel.maxLogEntries.collectAsState()
     val keepAlive by viewModel.keepAlive.collectAsState()
+    val useFluidCloudNotification by viewModel.useFluidCloudNotification.collectAsState()
+    val terminalLaunchMode by viewModel.terminalLaunchMode.collectAsState()
     val autoCheckUpdates by viewModel.autoCheckUpdates.collectAsState()
     val menuAtTouch by viewModel.menuAtTouch.collectAsState()
     val aiEnabled by viewModel.aiEnabled.collectAsState()
@@ -529,6 +555,7 @@ fun SettingsScreen(
     var showHttpPortDialog by remember { mutableStateOf(false) }
     var tempHttpPort by remember { mutableStateOf("") }
     var showDefaultJumpTargetDialog by remember { mutableStateOf(false) }
+    var showTerminalLaunchModeDialog by remember { mutableStateOf(false) }
     var showProotBuildModeDialog by remember { mutableStateOf(false) }
     var showProotRootfsDialog by remember { mutableStateOf(false) }
     var showProotCustomCommandDialog by remember { mutableStateOf(false) }
@@ -783,6 +810,20 @@ fun SettingsScreen(
 
             if (useProotMode) {
                 item {
+                    val terminalLaunchModeLabel = when (terminalLaunchMode) {
+                        SettingsManager.TERMINAL_LAUNCH_MODE_SYSTEM -> stringResource(R.string.terminal_launch_system_title)
+                        SettingsManager.TERMINAL_LAUNCH_MODE_ASK -> stringResource(R.string.terminal_launch_ask_title)
+                        else -> stringResource(R.string.terminal_launch_proot_title)
+                    }
+                    SettingsItem(
+                        title = stringResource(R.string.settings_terminal_launch_mode),
+                        subtitle = stringResource(R.string.settings_terminal_launch_mode_desc, terminalLaunchModeLabel),
+                        icon = Icons.Default.Terminal,
+                        onClick = { showTerminalLaunchModeDialog = true }
+                    )
+                }
+
+                item {
                     val buildModeLabel = when (prootBuildMode) {
                         "manual" -> stringResource(R.string.proot_build_mode_manual)
                         "custom" -> stringResource(R.string.proot_build_mode_custom)
@@ -835,10 +876,7 @@ fun SettingsScreen(
                         title = stringResource(R.string.proot_open_terminal),
                         subtitle = stringResource(R.string.proot_open_terminal_desc),
                         icon = Icons.Default.ChevronRight,
-                        onClick = {
-                            val intent = Intent(context, TerminalActivity::class.java)
-                            context.startActivity(intent)
-                        }
+                        onClick = { TerminalLauncher.start(context, mode = SettingsManager.TERMINAL_LAUNCH_MODE_PROOT) }
                     )
                 }
 
@@ -886,6 +924,15 @@ fun SettingsScreen(
                     subtitle = stringResource(R.string.settings_keep_alive_desc),
                     checked = keepAlive,
                     onCheckedChange = { viewModel.setKeepAlive(context, it) }
+                )
+            }
+
+            item {
+                SettingsToggleItem(
+                    title = stringResource(R.string.settings_fluid_cloud_notification),
+                    subtitle = stringResource(R.string.settings_fluid_cloud_notification_desc),
+                    checked = useFluidCloudNotification,
+                    onCheckedChange = { viewModel.setUseFluidCloudNotification(context, it) }
                 )
             }
 
@@ -1291,6 +1338,46 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showDefaultJumpTargetDialog = false }) {
+                    Text(stringResource(R.string.settings_cancel))
+                }
+            }
+        )
+    }
+
+    if (showTerminalLaunchModeDialog) {
+        AlertDialog(
+            onDismissRequest = { showTerminalLaunchModeDialog = false },
+            title = { Text(stringResource(R.string.settings_terminal_launch_mode)) },
+            text = {
+                Column {
+                    LanguageOption(
+                        stringResource(R.string.terminal_launch_proot_title),
+                        SettingsManager.TERMINAL_LAUNCH_MODE_PROOT,
+                        terminalLaunchMode
+                    ) {
+                        viewModel.setTerminalLaunchMode(it)
+                        showTerminalLaunchModeDialog = false
+                    }
+                    LanguageOption(
+                        stringResource(R.string.terminal_launch_system_title),
+                        SettingsManager.TERMINAL_LAUNCH_MODE_SYSTEM,
+                        terminalLaunchMode
+                    ) {
+                        viewModel.setTerminalLaunchMode(it)
+                        showTerminalLaunchModeDialog = false
+                    }
+                    LanguageOption(
+                        stringResource(R.string.terminal_launch_ask_title),
+                        SettingsManager.TERMINAL_LAUNCH_MODE_ASK,
+                        terminalLaunchMode
+                    ) {
+                        viewModel.setTerminalLaunchMode(it)
+                        showTerminalLaunchModeDialog = false
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showTerminalLaunchModeDialog = false }) {
                     Text(stringResource(R.string.settings_cancel))
                 }
             }

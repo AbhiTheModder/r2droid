@@ -58,6 +58,7 @@ import top.wsdx233.r2droid.feature.r2frida.R2FridaViewModel
 import top.wsdx233.r2droid.feature.r2frida.StaticProjectLoadState
 import top.wsdx233.r2droid.feature.r2frida.data.FridaMapping
 import top.wsdx233.r2droid.util.R2PipeManager
+import top.wsdx233.r2droid.util.TerminalLauncher
 import kotlinx.coroutines.launch
 
 @Composable
@@ -462,10 +463,7 @@ fun ProjectSettingsScreen(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable {
-                    val intent = android.content.Intent(context, top.wsdx233.r2droid.activity.TerminalActivity::class.java)
-                    context.startActivity(intent)
-                },
+                .clickable { TerminalLauncher.start(context) },
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.tertiaryContainer
             )

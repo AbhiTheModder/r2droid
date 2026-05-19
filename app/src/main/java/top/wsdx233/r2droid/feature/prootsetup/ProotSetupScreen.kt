@@ -1,6 +1,5 @@
 package top.wsdx233.r2droid.feature.prootsetup
 
-import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,12 +49,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import top.wsdx233.r2droid.R
-import top.wsdx233.r2droid.activity.TerminalActivity
 import top.wsdx233.r2droid.core.data.prefs.SettingsManager
 import top.wsdx233.r2droid.util.ProotInstallState
 import top.wsdx233.r2droid.util.ProotInstaller
 import top.wsdx233.r2droid.util.ProotRootfsCatalog
 import top.wsdx233.r2droid.util.ProotRootfsOption
+import top.wsdx233.r2droid.util.TerminalLauncher
 
 private enum class ProotSetupMode {
     AUTO,
@@ -134,7 +133,7 @@ fun ProotSetupScreen(
                         onContinue(if (selectedMode == ProotSetupMode.AUTO) "auto" else "manual")
                     },
                     onOpenTerminal = {
-                        context.startActivity(Intent(context, TerminalActivity::class.java))
+                        TerminalLauncher.start(context, mode = SettingsManager.TERMINAL_LAUNCH_MODE_PROOT)
                     }
                 )
             }

@@ -857,6 +857,8 @@
     <string name="settings_http_port_desc">Port for r2 HTTP server (1024-65535)</string>
     <string name="settings_keep_alive">Persistent Notification</string>
     <string name="settings_keep_alive_desc">Keep app alive in background during analysis</string>
+    <string name="settings_fluid_cloud_notification">Fluid Cloud Notification</string>
+    <string name="settings_fluid_cloud_notification_desc">Use Android live / fluid-cloud style for the persistent notification. Turn off for a regular ongoing notification.</string>
     <string name="settings_ignore_battery">Ignore Battery Optimization</string>
     <string name="settings_ignore_battery_desc">Request system to not restrict this app</string>
     <string name="settings_ignore_battery_already">Already unrestricted</string>
@@ -865,6 +867,17 @@
     <string name="keep_alive_channel_name">Background Analysis</string>
     <string name="keep_alive_notification_title">R2Droid is running</string>
     <string name="keep_alive_notification_text">Analysis session active</string>
+    <string name="settings_terminal_launch_mode">Terminal Launch Target</string>
+    <string name="settings_terminal_launch_mode_desc">When proot mode is enabled, open terminal as: %1$s</string>
+    <string name="terminal_launch_ask_title">Ask every time</string>
+    <string name="terminal_launch_dialog_title">Choose terminal target</string>
+    <string name="terminal_launch_dialog_desc">Proot mode is enabled. Select whether this terminal should enter the Ubuntu proot environment or use the Android system shell.</string>
+    <string name="terminal_launch_proot_title">Proot terminal</string>
+    <string name="terminal_launch_proot_desc">Enter the configured Ubuntu proot environment with radare2 tools.</string>
+    <string name="terminal_launch_system_title">System terminal</string>
+    <string name="terminal_launch_system_desc">Use the Android shell and bundled radare2 environment without entering proot.</string>
+    <string name="terminal_launch_do_not_ask_again">Don’t ask again</string>
+    <string name="terminal_launch_confirm">Open terminal</string>
 
     <string name="proot_setup_title">Proot Setup</string>
     <string name="proot_setup_preparing">Preparing Ubuntu environment...</string>

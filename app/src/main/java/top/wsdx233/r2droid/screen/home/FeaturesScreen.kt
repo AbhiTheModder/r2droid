@@ -1,6 +1,5 @@
 package top.wsdx233.r2droid.screen.home
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -53,8 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import top.wsdx233.r2droid.R
-import top.wsdx233.r2droid.activity.TerminalActivity
 import top.wsdx233.r2droid.feature.manual.R2ManualScreen
+import top.wsdx233.r2droid.util.TerminalLauncher
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -160,9 +159,7 @@ fun FeaturesScreen(
                 description = stringResource(R.string.feature_terminal_desc),
                 icon = Icons.Default.Terminal,
                 iconTint = Color(0xFF546E7A),
-                onClick = {
-                    context.startActivity(Intent(context, TerminalActivity::class.java))
-                }
+                onClick = { TerminalLauncher.start(context) }
             )
 
             FeatureCard(

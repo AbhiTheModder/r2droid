@@ -55,6 +55,7 @@ import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import kotlinx.coroutines.launch
 import top.wsdx233.r2droid.R
+import top.wsdx233.r2droid.core.data.prefs.SettingsManager
 import top.wsdx233.r2droid.core.ui.components.CommandSuggestButton
 import top.wsdx233.r2droid.core.ui.components.CommandSuggestionPanel
 import top.wsdx233.r2droid.util.R2Runtime
@@ -149,7 +150,9 @@ fun TerminalScreen() {
                     })
                     
                     // Create terminal session
-                    val launchSpec = R2Runtime.buildTerminalLaunch(ctx)
+                    val preferProot = SettingsManager.useProotMode &&
+                        SettingsManager.terminalLaunchMode != SettingsManager.TERMINAL_LAUNCH_MODE_SYSTEM
+                    val launchSpec = R2Runtime.buildTerminalLaunch(ctx, preferProot = preferProot)
                     val session = TerminalSession(
                         launchSpec.executable,
                         launchSpec.workingDirectory,

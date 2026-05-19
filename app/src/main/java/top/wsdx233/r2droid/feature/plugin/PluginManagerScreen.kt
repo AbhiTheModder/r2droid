@@ -101,6 +101,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import top.wsdx233.r2droid.R
 import top.wsdx233.r2droid.util.DocumentsUiOpenDocumentTreeContract
+import top.wsdx233.r2droid.util.TerminalLauncher
 import top.wsdx233.r2droid.util.UriUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -399,9 +400,7 @@ private fun PluginListTab(
                                         val startupCommand = PluginRuntime
                                             .resolveTerminalStartupCommand(plugin.state.id, terminal.command)
                                             .getOrElse { terminal.command }
-                                        val intent = android.content.Intent(context, top.wsdx233.r2droid.activity.TerminalActivity::class.java)
-                                            .putExtra("startup_command", startupCommand)
-                                        context.startActivity(intent)
+                                        TerminalLauncher.start(context, startupCommand = startupCommand)
                                     }
                                 }
                             },

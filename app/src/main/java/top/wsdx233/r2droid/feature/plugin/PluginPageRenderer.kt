@@ -48,11 +48,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import top.wsdx233.r2droid.activity.TerminalActivity
 import top.wsdx233.r2droid.core.ui.dialogs.ProotInstallDialog
 import top.wsdx233.r2droid.util.DocumentsUiOpenDocumentTreeContract
 import top.wsdx233.r2droid.util.PluginProotInstaller
 import top.wsdx233.r2droid.util.R2PipeManager
+import top.wsdx233.r2droid.util.TerminalLauncher
 import top.wsdx233.r2droid.util.UriUtils
 import java.io.File
 import java.io.FileOutputStream
@@ -117,9 +117,7 @@ private fun TerminalCommandPluginPage(
                 val startupCommand = PluginRuntime
                     .resolveTerminalStartupCommand(pluginId, terminal.command)
                     .getOrElse { terminal.command }
-                val intent = Intent(context, TerminalActivity::class.java)
-                    .putExtra("startup_command", startupCommand)
-                context.startActivity(intent)
+                TerminalLauncher.start(context, startupCommand = startupCommand)
             }
         ) {
             Text("Open Advanced Terminal")

@@ -24,6 +24,7 @@ object SettingsManager {
     private const val KEY_MAX_LOG_ENTRIES = "max_log_entries"
     private const val KEY_DECOMPILER_ZOOM_SCALE = "decompiler_zoom_scale"
     private const val KEY_KEEP_ALIVE = "keep_alive_notification"
+    private const val KEY_USE_FLUID_CLOUD_NOTIFICATION = "use_fluid_cloud_notification"
     private const val KEY_FRIDA_HOST = "frida_host"
     private const val KEY_FRIDA_PORT = "frida_port"
     private const val KEY_FRIDA_SEARCH_TIMEOUT_SECONDS = "frida_search_timeout_seconds"
@@ -32,6 +33,7 @@ object SettingsManager {
     private const val KEY_AI_OUTPUT_TRUNCATE_LIMIT = "ai_output_truncate_limit"
     private const val KEY_USE_HTTP_MODE = "use_http_mode"
     private const val KEY_USE_PROOT_MODE = "use_proot_mode"
+    private const val KEY_TERMINAL_LAUNCH_MODE = "terminal_launch_mode"
     private const val KEY_HTTP_PORT = "http_port"
     private const val KEY_ANALYSIS_BENCHMARK_SCORE = "analysis_benchmark_score"
     private const val KEY_ANALYSIS_BENCHMARK_AT = "analysis_benchmark_at"
@@ -42,6 +44,10 @@ object SettingsManager {
     private const val KEY_PROOT_BUILD_MODE = "proot_build_mode"
     private const val KEY_PROOT_CUSTOM_COMMAND = "proot_custom_command"
     private const val KEY_PROOT_ROOTFS_ALIAS = "proot_rootfs_alias"
+
+    const val TERMINAL_LAUNCH_MODE_ASK = "ask"
+    const val TERMINAL_LAUNCH_MODE_PROOT = "proot"
+    const val TERMINAL_LAUNCH_MODE_SYSTEM = "system"
 
     private lateinit var prefs: SharedPreferences
 
@@ -159,6 +165,10 @@ object SettingsManager {
         get() = prefs.getBoolean(KEY_KEEP_ALIVE, true)
         set(value) { prefs.edit { putBoolean(KEY_KEEP_ALIVE, value) } }
 
+    var useFluidCloudNotification: Boolean
+        get() = prefs.getBoolean(KEY_USE_FLUID_CLOUD_NOTIFICATION, true)
+        set(value) { prefs.edit { putBoolean(KEY_USE_FLUID_CLOUD_NOTIFICATION, value) } }
+
     var fridaHost: String
         get() = prefs.getString(KEY_FRIDA_HOST, "127.0.0.1") ?: "127.0.0.1"
         set(value) { prefs.edit { putString(KEY_FRIDA_HOST, value) } }
@@ -194,6 +204,17 @@ object SettingsManager {
                 putBoolean(KEY_USE_PROOT_MODE, if (AppVariant.forceProotMode) true else value)
             }
         }
+
+    fun sanitizeTerminalLaunchMode(value: String?): String = when (value) {
+        TERMINAL_LAUNCH_MODE_ASK,
+        TERMINAL_LAUNCH_MODE_PROOT,
+        TERMINAL_LAUNCH_MODE_SYSTEM -> value
+        else -> TERMINAL_LAUNCH_MODE_PROOT
+    }
+
+    var terminalLaunchMode: String
+        get() = sanitizeTerminalLaunchMode(prefs.getString(KEY_TERMINAL_LAUNCH_MODE, TERMINAL_LAUNCH_MODE_PROOT))
+        set(value) { prefs.edit { putString(KEY_TERMINAL_LAUNCH_MODE, sanitizeTerminalLaunchMode(value)) } }
 
     var httpPort: Int
         get() = prefs.getInt(KEY_HTTP_PORT, 9090)

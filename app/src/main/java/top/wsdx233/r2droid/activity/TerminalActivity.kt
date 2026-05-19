@@ -15,17 +15,23 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import top.wsdx233.r2droid.R
+import top.wsdx233.r2droid.core.data.prefs.SettingsManager
+import top.wsdx233.r2droid.core.ui.dialogs.TerminalLaunchDialog
+import top.wsdx233.r2droid.ui.theme.R2droidTheme
 import top.wsdx233.r2droid.util.R2Runtime
+import top.wsdx233.r2droid.util.TerminalLauncher
 
 class TerminalActivity : ComponentActivity() {
 
     private var terminalSession: TerminalSession? = null
     private lateinit var terminalView: TerminalView
+    private var terminalMode: String = SettingsManager.TERMINAL_LAUNCH_MODE_SYSTEM
 
     // Extra keys modifier state
     private var ctrlPressed = false
@@ -146,9 +152,64 @@ class TerminalActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SettingsManager.initialize(applicationContext)
+        resolveTerminalMode()?.let { mode ->
+            startTerminal(mode)
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (terminalSession == null) {
+            resolveTerminalMode()?.let { mode -> startTerminal(mode) }
+            return
+        }
+        bindLayout()
+        attachSessionToTerminalView()
+    }
+
+    private fun resolveTerminalMode(): String? {
+        val requestedMode = intent.getStringExtra(TerminalLauncher.EXTRA_TERMINAL_MODE)
+        if (!requestedMode.isNullOrBlank()) {
+            val sanitizedMode = SettingsManager.sanitizeTerminalLaunchMode(requestedMode)
+            if (sanitizedMode != SettingsManager.TERMINAL_LAUNCH_MODE_ASK) {
+                return sanitizedMode
+            }
+        }
+        if (!SettingsManager.useProotMode) {
+            return SettingsManager.TERMINAL_LAUNCH_MODE_SYSTEM
+        }
+        return when (SettingsManager.terminalLaunchMode) {
+            SettingsManager.TERMINAL_LAUNCH_MODE_SYSTEM -> SettingsManager.TERMINAL_LAUNCH_MODE_SYSTEM
+            SettingsManager.TERMINAL_LAUNCH_MODE_PROOT -> SettingsManager.TERMINAL_LAUNCH_MODE_PROOT
+            else -> {
+                showTerminalModeDialog()
+                null
+            }
+        }
+    }
+
+    private fun showTerminalModeDialog() {
+        setContent {
+            R2droidTheme {
+                TerminalLaunchDialog(
+                    onDismiss = { finish() },
+                    onConfirm = { mode, rememberChoice ->
+                        if (rememberChoice) {
+                            SettingsManager.terminalLaunchMode = mode
+                        }
+                        startTerminal(mode)
+                    }
+                )
+            }
+        }
+    }
+
+    private fun startTerminal(mode: String) {
+        terminalMode = SettingsManager.sanitizeTerminalLaunchMode(mode)
         bindLayout()
 
-        val startupCommand = intent.getStringExtra("startup_command")?.trim().orEmpty()
+        val startupCommand = intent.getStringExtra(TerminalLauncher.EXTRA_STARTUP_COMMAND)?.trim().orEmpty()
         val session = createTerminalSession()
         terminalSession = session
         attachSessionToTerminalView()
@@ -157,12 +218,6 @@ class TerminalActivity : ComponentActivity() {
             session.write(startupCommand)
             session.write("\n")
         }
-    }
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-        bindLayout()
-        attachSessionToTerminalView()
     }
 
     private fun bindLayout() {
@@ -189,7 +244,10 @@ class TerminalActivity : ComponentActivity() {
     }
 
     private fun createTerminalSession(): TerminalSession {
-        val launchSpec = R2Runtime.buildTerminalLaunch(this)
+        val launchSpec = R2Runtime.buildTerminalLaunch(
+            this,
+            preferProot = terminalMode != SettingsManager.TERMINAL_LAUNCH_MODE_SYSTEM
+        )
         return TerminalSession(
             launchSpec.executable,
             launchSpec.workingDirectory,

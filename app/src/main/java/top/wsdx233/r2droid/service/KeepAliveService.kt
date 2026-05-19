@@ -10,6 +10,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import top.wsdx233.r2droid.R
+import top.wsdx233.r2droid.core.data.prefs.SettingsManager
 
 class KeepAliveService : Service() {
 
@@ -45,6 +46,7 @@ class KeepAliveService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        SettingsManager.initialize(applicationContext)
         ensureChannel(this)
     }
 
@@ -66,7 +68,7 @@ class KeepAliveService : Service() {
             NotificationCompat.Builder(this)
         }
 
-        // Set BigTextStyle (must use one of BigTextStyle / ProgressStyle / CallStyle / MetricStyle)
+        val useFluidCloud = SettingsManager.useFluidCloudNotification
         val bigTextStyle = NotificationCompat.BigTextStyle()
         .setBigContentTitle(getString(R.string.keep_alive_notification_title))
         .bigText(getString(R.string.keep_alive_notification_text))
@@ -77,16 +79,18 @@ class KeepAliveService : Service() {
         .setSmallIcon(R.drawable.ic_stat_r2droid_live)
         .setColor(0xFF40C47A.toInt())
         .setContentIntent(pi)
-        .setOngoing(true) // must ongoing
-        .setStyle(bigTextStyle) // Key: Meet the real-time update style requirements
+        .setOngoing(true)
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
         .setPriority(NotificationCompat.PRIORITY_LOW)
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         .also { b ->
-            // Android 16+ Live Updates
-            if (Build.VERSION.SDK_INT >= 36) {
-                b.setRequestPromotedOngoing(true)
-                b.setShortCriticalText("R2Droid")
+            if (useFluidCloud) {
+                // Fluid-cloud / Live Updates style. Android 16+ can request promoted ongoing.
+                b.setStyle(bigTextStyle)
+                if (Build.VERSION.SDK_INT >= 36) {
+                    b.setRequestPromotedOngoing(true)
+                    b.setShortCriticalText("R2Droid")
+                }
             }
         }
         .build()

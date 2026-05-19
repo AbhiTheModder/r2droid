@@ -85,6 +85,11 @@ object R2Runtime {
 
     fun buildTerminalLaunch(context: Context): TerminalLaunchSpec {
         val useProot = SettingsManager.useProotMode
+        return buildTerminalLaunch(context, preferProot = useProot)
+    }
+
+    fun buildTerminalLaunch(context: Context, preferProot: Boolean): TerminalLaunchSpec {
+        val useProot = preferProot && SettingsManager.useProotMode
         if (useProot && SettingsManager.prootBuildMode == "custom") {
             return buildCustomTerminalLaunch(context)
         }
@@ -101,15 +106,7 @@ object R2Runtime {
             return buildProotSetupHintTerminalLaunch(context)
         }
 
-        val workDir = File(context.filesDir, "radare2/bin").absolutePath
-        File(workDir).mkdirs()
-        val envs = buildDirectEnvironment(context.filesDir).entries.map { (key, value) -> "$key=$value" }.toTypedArray()
-        return TerminalLaunchSpec(
-            executable = "/system/bin/sh",
-            workingDirectory = workDir,
-            args = null,
-            environment = envs
-        )
+        return buildSystemTerminalLaunch(context)
     }
 
     fun buildProotShellSpec(
@@ -222,6 +219,18 @@ object R2Runtime {
 
         if (!runtimeDir.exists()) runtimeDir.mkdirs()
         return command
+    }
+
+    fun buildSystemTerminalLaunch(context: Context): TerminalLaunchSpec {
+        val workDir = File(context.filesDir, "radare2/bin").absolutePath
+        File(workDir).mkdirs()
+        val envs = buildDirectEnvironment(context.filesDir).entries.map { (key, value) -> "$key=$value" }.toTypedArray()
+        return TerminalLaunchSpec(
+            executable = "/system/bin/sh",
+            workingDirectory = workDir,
+            args = null,
+            environment = envs
+        )
     }
 
     private fun shouldUseProot(rawArgs: String?): Boolean {
