@@ -20,8 +20,12 @@ import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.coroutines.launch
@@ -59,12 +64,14 @@ import top.wsdx233.r2droid.core.ui.components.AutoHideAddressScrollbar
 import top.wsdx233.r2droid.ui.theme.LocalAppFont
 import top.wsdx233.r2droid.R
 import androidx.compose.runtime.setValue
+import top.wsdx233.r2droid.feature.debug.ui.DebugPanel
 import top.wsdx233.r2droid.feature.debug.ui.RegisterBottomSheet
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import top.wsdx233.r2droid.core.data.prefs.SettingsManager
 import top.wsdx233.r2droid.feature.debug.data.DebugBackend
+import top.wsdx233.r2droid.util.R2PipeManager
 
 /**
  * Virtualized Disassembly Viewer - uses DisasmDataManager for smooth infinite scrolling.
@@ -83,7 +90,8 @@ fun DisassemblyViewer(
     viewModel: top.wsdx233.r2droid.feature.disasm.DisasmViewModel,
     cursorAddress: Long,
     scrollToSelectionTrigger: kotlinx.coroutines.flow.StateFlow<Int>,
-    onInstructionClick: (Long) -> Unit
+    onInstructionClick: (Long) -> Unit,
+    onNavigateToR2Frida: (() -> Unit)? = null
 ) {
     val disasmDataManager = viewModel.disasmDataManager
     val cacheVersion by viewModel.disasmCacheVersion.collectAsState()
@@ -91,18 +99,26 @@ fun DisassemblyViewer(
     val breakpoints by viewModel.breakpoints.collectAsState()
     val pcAddress by viewModel.pcAddress.collectAsState()
     val debugStatus by viewModel.debugStatus.collectAsState()
+    val debugError by viewModel.debugError.collectAsState()
     val registers by viewModel.registers.collectAsState()
+    val debugStackState by viewModel.debugStackState.collectAsState()
+    val debugMemoryState by viewModel.debugMemoryState.collectAsState()
+    val debugTraceEntries by viewModel.debugTraceEntries.collectAsState()
+    val debugLaunchConfig by viewModel.debugLaunchConfig.collectAsState()
+    val debugCapabilities by viewModel.debugCapabilities.collectAsState()
     val debugBackend by viewModel.debugBackend.collectAsState()
+    val isR2FridaSession = R2PipeManager.isR2FridaSession
 
     var showRegisters by remember { mutableStateOf(false) }
+    var autoShowRegisters by remember { mutableStateOf(false) }
     var showDebugControls by remember { mutableStateOf(false) }
     var showDebugSettings by remember { mutableStateOf(false) }
 
-    LaunchedEffect(debugStatus) {
+    LaunchedEffect(debugStatus, autoShowRegisters) {
         if (debugStatus != top.wsdx233.r2droid.feature.disasm.DebugStatus.IDLE) {
             showDebugControls = true
         }
-        if (debugStatus == top.wsdx233.r2droid.feature.disasm.DebugStatus.SUSPENDED) {
+        if (autoShowRegisters && debugStatus == top.wsdx233.r2droid.feature.disasm.DebugStatus.SUSPENDED) {
             showRegisters = true
         }
     }
@@ -397,6 +413,20 @@ fun DisassemblyViewer(
                                     onInstructionClick(addr)
                                     showMenu = false
                                 },
+                                showDebugActions = debugStatus != top.wsdx233.r2droid.feature.disasm.DebugStatus.IDLE,
+                                isBreakpoint = breakpoints.contains(instr.addr),
+                                onToggleBreakpoint = {
+                                    viewModel.toggleBreakpoint(instr.addr)
+                                    showMenu = false
+                                },
+                                onRunToCursor = {
+                                    viewModel.runToCursor(instr.addr)
+                                    showMenu = false
+                                },
+                                onSetPcHere = {
+                                    viewModel.setDebugPc(instr.addr)
+                                    showMenu = false
+                                },
                                 offset = if (SettingsManager.menuAtTouch) {
                                     with(density) {
                                         androidx.compose.ui.unit.DpOffset(menuTapOffset.x.toDp(), (menuTapOffset.y - menuRowHeight).toDp())
@@ -460,6 +490,19 @@ fun DisassemblyViewer(
                     fontSize = 12.sp, 
                     fontFamily = LocalAppFont.current
                 )
+                if (debugStatus != top.wsdx233.r2droid.feature.disasm.DebugStatus.IDLE && pcAddress != null) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    AssistChip(
+                        onClick = { pcAddress?.let(onInstructionClick) },
+                        label = {
+                            Text(
+                                stringResource(R.string.debug_footer_next_pc, "0x%X".format(pcAddress)),
+                                fontSize = 11.sp,
+                                fontFamily = LocalAppFont.current
+                            )
+                        }
+                    )
+                }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     "Loaded: $loadedCount instrs", 
@@ -715,23 +758,56 @@ fun DisassemblyViewer(
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp)
         ) {
-            DebugControlBar(
+            DebugPanel(
                 debugStatus = debugStatus,
                 debugBackend = debugBackend,
+                pcAddress = pcAddress,
+                registers = registers,
+                breakpoints = breakpoints,
+                stackEntries = debugStackState.entries,
+                stackPointer = debugStackState.stackPointer,
+                memoryAddress = debugMemoryState.address,
+                memoryBytes = debugMemoryState.bytes,
+                memoryLoading = debugMemoryState.isLoading,
+                memoryError = debugMemoryState.error,
+                traceEntries = debugTraceEntries,
+                capabilities = debugCapabilities,
+                autoShowRegisters = autoShowRegisters,
+                onAutoShowRegistersChange = { autoShowRegisters = it },
                 onStartDebugging = { viewModel.startDebugging() },
                 onStepInto = { viewModel.performDebugAction("step") },
                 onStepOver = { viewModel.performDebugAction("over") },
                 onContinue = { viewModel.performDebugAction("continue") },
                 onPause = { viewModel.pauseExecution() },
+                onResetDebugging = { viewModel.resetDebugging() },
                 onStopDebugging = { viewModel.stopDebugging() },
-                onShowRegisters = { showRegisters = true },
-                onSettings = { showDebugSettings = true }
+                onSettings = { showDebugSettings = true },
+                onJumpToAddress = { addr -> onInstructionClick(addr) },
+                onRemoveBreakpoint = { addr -> viewModel.toggleBreakpoint(addr) },
+                onRefreshMemoryAtPc = { viewModel.readMemoryAtPc() },
+                onRefreshMemoryAtSp = { viewModel.readMemoryAtSp() },
+                onClearTrace = { viewModel.clearDebugTrace() }
+            )
+        }
+
+        debugError?.let { error ->
+            AlertDialog(
+                onDismissRequest = { viewModel.clearDebugError() },
+                title = { Text(stringResource(R.string.debug_error_title)) },
+                text = { Text(error) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = { viewModel.clearDebugError() }) {
+                        Text(stringResource(R.string.dialog_ok))
+                    }
+                }
             )
         }
 
         if (showRegisters) {
             RegisterBottomSheet(
                 registers = registers,
+                autoShowRegisters = autoShowRegisters,
+                onAutoShowRegistersChange = { autoShowRegisters = it },
                 onDismissRequest = { showRegisters = false }
             )
         }
@@ -739,9 +815,28 @@ fun DisassemblyViewer(
         if (showDebugSettings) {
             AlertDialog(
                 onDismissRequest = { showDebugSettings = false },
-                title = { Text("Debug Backend") },
+                title = { Text(stringResource(R.string.debug_backend_title)) },
                 text = {
                     Column {
+                        if (debugBackend == DebugBackend.FRIDA && !isR2FridaSession) {
+                            Text(
+                                text = stringResource(R.string.debug_frida_requires_session),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            onNavigateToR2Frida?.let { navigate ->
+                                Button(
+                                    onClick = {
+                                        showDebugSettings = false
+                                        navigate()
+                                    },
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                ) {
+                                    Text(stringResource(R.string.debug_go_to_r2frida))
+                                }
+                            }
+                        }
                         val backends = DebugBackend.entries.toTypedArray()
                         backends.forEach { backend ->
                             Row(
@@ -749,7 +844,6 @@ fun DisassemblyViewer(
                                     .fillMaxWidth()
                                     .clickable {
                                         viewModel.setDebugBackend(backend)
-                                        showDebugSettings = false
                                     }
                                     .padding(vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -758,18 +852,100 @@ fun DisassemblyViewer(
                                     selected = debugBackend == backend,
                                     onClick = {
                                         viewModel.setDebugBackend(backend)
-                                        showDebugSettings = false
                                     }
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text(text = backend.name)
+                                Text(
+                                    text = when (backend) {
+                                        DebugBackend.ESIL -> stringResource(R.string.debug_backend_esil)
+                                        DebugBackend.NATIVE_GDB -> stringResource(R.string.debug_backend_native_r2)
+                                        DebugBackend.FRIDA -> stringResource(R.string.debug_backend_frida)
+                                        DebugBackend.GDB_REMOTE -> stringResource(R.string.debug_backend_gdb_remote)
+                                    }
+                                )
                             }
                         }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.updateDebugLaunchConfig(
+                                        debugLaunchConfig.copy(startAtCurrentSeek = !debugLaunchConfig.startAtCurrentSeek)
+                                    )
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = debugLaunchConfig.startAtCurrentSeek,
+                                onCheckedChange = { checked ->
+                                    viewModel.updateDebugLaunchConfig(debugLaunchConfig.copy(startAtCurrentSeek = checked))
+                                }
+                            )
+                            Text(stringResource(R.string.debug_config_start_current_seek))
+                        }
+                        OutlinedTextField(
+                            value = debugLaunchConfig.startAddressText,
+                            onValueChange = { viewModel.updateDebugLaunchConfig(debugLaunchConfig.copy(startAddressText = it)) },
+                            label = { Text(stringResource(R.string.debug_config_start_address)) },
+                            placeholder = { Text(stringResource(R.string.debug_config_start_address_hint)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = debugLaunchConfig.stackAddressText,
+                            onValueChange = { viewModel.updateDebugLaunchConfig(debugLaunchConfig.copy(stackAddressText = it)) },
+                            label = { Text(stringResource(R.string.debug_config_stack_address)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = debugLaunchConfig.stackSizeText,
+                            onValueChange = { viewModel.updateDebugLaunchConfig(debugLaunchConfig.copy(stackSizeText = it)) },
+                            label = { Text(stringResource(R.string.debug_config_stack_size)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = debugLaunchConfig.maxEsilStepsText,
+                            onValueChange = { viewModel.updateDebugLaunchConfig(debugLaunchConfig.copy(maxEsilStepsText = it)) },
+                            label = { Text(stringResource(R.string.debug_config_max_esil_steps)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = debugLaunchConfig.esilTimeoutMsText,
+                            onValueChange = { viewModel.updateDebugLaunchConfig(debugLaunchConfig.copy(esilTimeoutMsText = it)) },
+                            label = { Text(stringResource(R.string.debug_config_esil_timeout_ms)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = debugLaunchConfig.attachPidText,
+                            onValueChange = { viewModel.updateDebugLaunchConfig(debugLaunchConfig.copy(attachPidText = it)) },
+                            label = { Text(stringResource(R.string.debug_config_attach_pid)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = debugLaunchConfig.gdbRemoteHostText,
+                            onValueChange = { viewModel.updateDebugLaunchConfig(debugLaunchConfig.copy(gdbRemoteHostText = it)) },
+                            label = { Text(stringResource(R.string.debug_config_gdb_host)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = debugLaunchConfig.gdbRemotePortText,
+                            onValueChange = { viewModel.updateDebugLaunchConfig(debugLaunchConfig.copy(gdbRemotePortText = it)) },
+                            label = { Text(stringResource(R.string.debug_config_gdb_port)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
                     }
                 },
                 confirmButton = {
                     androidx.compose.material3.TextButton(onClick = { showDebugSettings = false }) {
-                        Text("Close")
+                        Text(stringResource(R.string.func_close))
                     }
                 }
             )

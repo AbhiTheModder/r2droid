@@ -52,13 +52,14 @@ internal object AndroidR2PipeSupport {
         filePath: String? = null,
         flags: String = "",
         rawArgs: String? = null,
-        logTag: String = "R2Pipe"
+        logTag: String = "R2Pipe",
+        suppressKnownR2FridaWarnings: Boolean = false
     ): R2Pipe {
         return R2Pipe.open(
             launchSpec = toCoreLaunchSpec(
                 R2Runtime.buildStdioLaunch(context.applicationContext, filePath, flags, rawArgs)
             ),
-            logger = logger(logTag),
+            logger = logger(logTag, suppressKnownR2FridaWarnings),
             processKiller = processKiller
         )
     }
@@ -69,20 +70,26 @@ internal object AndroidR2PipeSupport {
         flags: String = "",
         rawArgs: String? = null,
         port: Int,
-        logTag: String = "R2PipeHttp"
+        logTag: String = "R2PipeHttp",
+        suppressKnownR2FridaWarnings: Boolean = false
     ): R2PipeHttp {
         return R2PipeHttp.spawn(
             launchSpec = toCoreLaunchSpec(
                 R2Runtime.buildHttpLaunch(context.applicationContext, filePath, flags, rawArgs, port)
             ),
             port = port,
-            logger = logger(logTag),
+            logger = logger(logTag, suppressKnownR2FridaWarnings),
             processKiller = processKiller
         )
     }
 
-    fun logger(tag: String): R2PipeLogger {
+    fun logger(tag: String, suppressKnownR2FridaWarnings: Boolean = false): R2PipeLogger {
         return R2PipeLogger { level, message ->
+            if (suppressKnownR2FridaWarnings && shouldSuppressR2FridaRegisterWarning(message)) {
+                Log.d(tag, "Suppressed r2frida register warning: $message")
+                return@R2PipeLogger
+            }
+
             when (level) {
                 R2PipeLogLevel.DEBUG -> Log.d(tag, message)
                 R2PipeLogLevel.INFO -> Log.i(tag, message)
@@ -97,6 +104,17 @@ internal object AndroidR2PipeSupport {
             }
             LogManager.log(logType, message)
         }
+    }
+
+    private fun shouldSuppressR2FridaRegisterWarning(message: String): Boolean {
+        val trimmed = message.trim()
+        if (trimmed == "ERROR: Register not found") return true
+        if (!trimmed.startsWith("ERROR: ar: Unknown register ")) return false
+        val name = trimmed.substringAfter("'").substringBefore("'")
+        return name in setOf(
+            "sb", "sl", "fp", "ip", "lr", "sp", "pc", "cpsr", "apsr", "xpsr",
+            "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"
+        ) || Regex("[wx]\\d+").matches(name)
     }
 
     private fun runShellCommand(command: String) {

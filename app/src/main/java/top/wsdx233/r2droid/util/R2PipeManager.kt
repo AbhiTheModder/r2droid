@@ -223,7 +223,8 @@ object R2PipeManager {
                 flags = flags,
                 rawArgs = rawArgs,
                 port = resolvedHttpPort ?: SettingsManager.httpPort,
-                logTag = "R2PipeHttp"
+                logTag = "R2PipeHttp",
+                suppressKnownR2FridaWarnings = isFrida
             )
         } else {
             AndroidR2PipeSupport.openStdio(
@@ -231,7 +232,8 @@ object R2PipeManager {
                 filePath = filePath,
                 flags = flags,
                 rawArgs = rawArgs,
-                logTag = "R2Pipe"
+                logTag = "R2Pipe",
+                suppressKnownR2FridaWarnings = isFrida
             )
         }
 
@@ -393,9 +395,12 @@ object R2PipeManager {
      * @param cmd 要执行的 r2 命令
      * @return Result<String> 包含命令输出或异常
      */
-    suspend fun execute(sessionId: String, cmd: String): Result<String> {
+    suspend fun execute(sessionId: String, cmd: String, markDirty: Boolean = true): Result<String> {
         val session = _sessions.value[sessionId]
             ?: return Result.failure(IllegalStateException("Session not found: $sessionId"))
+        if (isR2FridaOnlyCommand(cmd) && !session.isFridaSession) {
+            return Result.failure(IllegalStateException("r2frida command requires an active r2frida session: $cmd"))
+        }
 
         return session.mutex.withLock {
             withContext(Dispatchers.IO) {
@@ -416,7 +421,9 @@ object R2PipeManager {
                     if (output.isNotBlank()) {
                         LogManager.log(LogType.OUTPUT, output)
                     }
-                    session.isDirtyAfterSave = true
+                    if (markDirty) {
+                        session.isDirtyAfterSave = true
+                    }
                     session.state.value = State.Success(cmd, output)
                     publishActiveStateFrom(sessionId)
                     Result.success(output)
@@ -432,10 +439,27 @@ object R2PipeManager {
         }
     }
 
-    suspend fun execute(cmd: String): Result<String> {
+    suspend fun execute(cmd: String, markDirty: Boolean = true): Result<String> {
         val sid = _activeSessionId.value
             ?: return Result.failure(IllegalStateException("No active session."))
-        return execute(sid, cmd)
+        return execute(sid, cmd, markDirty)
+    }
+
+    private fun isR2FridaOnlyCommand(cmd: String): Boolean {
+        val trimmed = cmd.trimStart()
+        val body = when {
+            trimmed.startsWith(":") -> trimmed.drop(1).trimStart()
+            trimmed.startsWith(".:") -> trimmed.drop(2).trimStart()
+            else -> return false
+        }
+        val token = body.takeWhile { !it.isWhitespace() && it != ';' }
+        return token in setOf(
+            ".", "eval",
+            "ij", "ilj", "iej", "iEj", "izj", "isj", "iSj",
+            "dr", "dr.", "drj",
+            "db", "dbj", "db-",
+            "dc", "dcu", "dmj", "dpt", "dptj"
+        )
     }
 
     /**
@@ -483,14 +507,14 @@ object R2PipeManager {
      * 辅助方法：执行 JSON 命令
      * 自动确保命令以 'j' 结尾
      */
-    suspend fun executeJson(sessionId: String, cmd: String): Result<String> {
+    suspend fun executeJson(sessionId: String, cmd: String, markDirty: Boolean = false): Result<String> {
         val jsonCmd = if (cmd.endsWith("j")) cmd else "${cmd}j"
-        return execute(sessionId, jsonCmd)
+        return execute(sessionId, jsonCmd, markDirty)
     }
 
-    suspend fun executeJson(cmd: String): Result<String> {
+    suspend fun executeJson(cmd: String, markDirty: Boolean = false): Result<String> {
         val jsonCmd = if (cmd.endsWith("j")) cmd else "${cmd}j"
-        return execute(jsonCmd)
+        return execute(jsonCmd, markDirty)
     }
 
     /**

@@ -16,18 +16,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowRightAlt
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.automirrored.filled.Redo
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -39,7 +30,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.wsdx233.r2droid.core.data.model.DisasmInstruction
-import top.wsdx233.r2droid.feature.debug.data.DebugBackend
 import top.wsdx233.r2droid.ui.theme.LocalAppFont
 import top.wsdx233.r2droid.ui.theme.LocalDarkTheme
 
@@ -482,76 +472,6 @@ fun DisasmRow(
         // Render menu inside Box so it anchors to this row
         if (showMenu) {
             menuContent()
-        }
-    }
-}
-
-@Composable
-fun DebugControlBar(
-    modifier: Modifier = Modifier,
-    debugStatus: top.wsdx233.r2droid.feature.disasm.DebugStatus,
-    debugBackend: DebugBackend,
-    onStartDebugging: () -> Unit,
-    onStepInto: () -> Unit,
-    onStepOver: () -> Unit,
-    onContinue: () -> Unit,
-    onPause: () -> Unit,
-    onStopDebugging: () -> Unit,
-    onShowRegisters: () -> Unit = {},
-    onSettings: () -> Unit = {}
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-        modifier = modifier.padding(16.dp).background(Color.Transparent)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = when (debugBackend) {
-                    DebugBackend.ESIL -> "ESIL"
-                    DebugBackend.NATIVE_GDB -> "Native GDB"
-                    DebugBackend.FRIDA -> "Frida"
-                },
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
-
-            if (debugStatus == top.wsdx233.r2droid.feature.disasm.DebugStatus.IDLE) {
-                IconButton(onClick = onStartDebugging) {
-                    Icon(Icons.Default.PowerSettingsNew, "Start Debug")
-                }
-            } else {
-                if (debugStatus == top.wsdx233.r2droid.feature.disasm.DebugStatus.RUNNING) {
-                    IconButton(onClick = onPause) {
-                        Icon(Icons.Default.Pause, "Pause")
-                    }
-                } else {
-                    IconButton(onClick = onContinue) {
-                        Icon(Icons.Default.PlayArrow, "Continue")
-                    }
-                    IconButton(onClick = onStepInto) {
-                        Icon(Icons.Default.KeyboardArrowDown, "Step Into")
-                    }
-                    IconButton(onClick = onStepOver) {
-                        Icon(Icons.AutoMirrored.Filled.Redo, "Step Over")
-                    }
-                    IconButton(onClick = onShowRegisters) {
-                        Icon(Icons.AutoMirrored.Filled.List, "Show Registers")
-                    }
-                    IconButton(onClick = onStopDebugging) {
-                        Icon(Icons.Default.Close, "Close Debug")
-                    }
-                }
-            }
-            if (debugStatus == top.wsdx233.r2droid.feature.disasm.DebugStatus.IDLE) {
-                IconButton(onClick = onSettings) {
-                    Icon(Icons.Default.Settings, "Debug Settings")
-                }
-            }
         }
     }
 }

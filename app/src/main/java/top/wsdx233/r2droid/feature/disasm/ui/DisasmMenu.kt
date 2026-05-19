@@ -34,6 +34,11 @@ fun DisasmContextMenu(
     onFunctionVariables: () -> Unit = {},
     onInstructionDetail: () -> Unit = {},
     onJumpToTarget: ((Long) -> Unit)? = null,
+    showDebugActions: Boolean = false,
+    isBreakpoint: Boolean = false,
+    onToggleBreakpoint: () -> Unit = {},
+    onRunToCursor: () -> Unit = {},
+    onSetPcHere: () -> Unit = {},
     offset: DpOffset = DpOffset.Zero
 ) {
     if (expanded) {
@@ -84,6 +89,19 @@ fun DisasmContextMenu(
                             )
                         }
                     )
+
+                    if (showDebugActions) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.debug_menu_submenu)) },
+                            onClick = { currentMenu = "debug" },
+                            trailingIcon = {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = "Submenu"
+                                )
+                            }
+                        )
+                    }
 
                     // Jump to target (only for jump instructions)
                     if (instr?.jump != null && onJumpToTarget != null) {
@@ -214,6 +232,38 @@ fun DisasmContextMenu(
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.menu_function_variables)) },
                         onClick = { onFunctionVariables() }
+                    )
+                }
+
+                "debug" -> {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.menu_back)) },
+                        onClick = { currentMenu = "main" },
+                        leadingIcon = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
+                    )
+                    HorizontalDivider()
+
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (isBreakpoint) stringResource(R.string.debug_action_remove_breakpoint)
+                                else stringResource(R.string.debug_action_add_breakpoint)
+                            )
+                        },
+                        onClick = { onToggleBreakpoint() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.debug_action_run_to_cursor)) },
+                        onClick = { onRunToCursor() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.debug_action_set_pc_here)) },
+                        onClick = { onSetPcHere() }
                     )
                 }
             }

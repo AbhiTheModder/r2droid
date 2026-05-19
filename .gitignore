@@ -14,6 +14,7 @@ desktop.ini
 /captures/
 .claude/
 .agent/
+.pi/
 .roo/
 *.apk
 app/release/*

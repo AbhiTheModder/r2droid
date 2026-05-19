@@ -486,12 +486,13 @@ object PluginRuntime {
     }
 
     private fun executeFridaScript(context: RunContext, script: String): String {
+        check(R2PipeManager.isR2FridaSession) { "Frida script execution requires an active r2frida session" }
         val scriptDir = File(context.installDir, "data").apply { mkdirs() }
         val scriptFile = File(scriptDir, "frida_plugin_${System.currentTimeMillis()}.js")
         return try {
             scriptFile.writeText(script)
             runBlocking {
-                R2PipeManager.execute(":. ${scriptFile.absolutePath}")
+                R2PipeManager.execute(":. ${scriptFile.absolutePath}", markDirty = false)
             }.getOrThrow()
         } finally {
             scriptFile.delete()

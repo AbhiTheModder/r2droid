@@ -12,7 +12,7 @@ class R2FridaRepository {
     }
 
     suspend fun getOverview(): Result<FridaInfo> = runCatching {
-        val raw = seekJson(R2PipeManager.execute(":ij").getOrThrow())
+        val raw = seekJson(executeR2Frida(":ij").getOrThrow())
         FridaInfo.fromJson(JSONObject(raw))
     }
 
@@ -47,13 +47,13 @@ class R2FridaRepository {
     suspend fun executeScript(script: String, cacheDir: String): Result<String> = runCatching {
         val file = java.io.File(cacheDir, "frida_script.js")
         file.writeText(script)
-        R2PipeManager.execute(":. ${file.absolutePath}").getOrThrow()
+        executeR2Frida(":. ${file.absolutePath}").getOrThrow()
     }
 
     private suspend fun <T> parseJsonArray(
         cmd: String, mapper: (JSONObject) -> T
     ): Result<List<T>> = runCatching {
-        val raw = seekJson(R2PipeManager.execute(cmd).getOrThrow())
+        val raw = seekJson(executeR2Frida(cmd).getOrThrow())
         val arr = JSONArray(raw)
         (0 until arr.length()).map { mapper(arr.getJSONObject(it)) }
     }
@@ -129,7 +129,7 @@ class R2FridaRepository {
             .replace("__WRITE_VALUE__", escapeJs(value))
         val file = java.io.File(cacheDir, "frida_write.js")
         file.writeText(script)
-        R2PipeManager.execute(":. ${file.absolutePath}").getOrThrow()
+        executeR2Frida(":. ${file.absolutePath}").getOrThrow()
     }
 
     /** Batch write the same value to multiple addresses. */
@@ -143,7 +143,7 @@ class R2FridaRepository {
             .replace("__WRITE_VALUE__", escapeJs(value))
         val file = java.io.File(cacheDir, "frida_batch_write.js")
         file.writeText(script)
-        R2PipeManager.execute(":. ${file.absolutePath}").getOrThrow()
+        executeR2Frida(":. ${file.absolutePath}").getOrThrow()
     }
 
     /** Re-read current values at all result addresses. */
@@ -182,15 +182,15 @@ class R2FridaRepository {
 
         val scriptFile = java.io.File(scriptDir, "frida_script_monitor_${monitorId}_${ts}.js")
         scriptFile.writeText(scriptContent)
-        R2PipeManager.execute(":. ${scriptFile.absolutePath}").getOrThrow()
+        executeR2Frida(":. ${scriptFile.absolutePath}").getOrThrow()
 
         return resultFile.absolutePath
     }
 
     suspend fun stopMonitor(monitorId: String) {
         val stopKey = "__mon_stop_${monitorId}__"
-        R2PipeManager.execute(":eval ${FridaCustomScripts.STOP_MONITOR_SET_FLAG.replace("__STOP_KEY__", stopKey)}")
-        R2PipeManager.execute(":eval ${FridaCustomScripts.STOP_MONITOR_DISABLE}")
+        executeR2Frida(":eval ${FridaCustomScripts.STOP_MONITOR_SET_FLAG.replace("__STOP_KEY__", stopKey)}")
+        executeR2Frida(":eval ${FridaCustomScripts.STOP_MONITOR_DISABLE}")
     }
 
     private suspend fun runCustomScript(
@@ -217,7 +217,7 @@ class R2FridaRepository {
         val scriptFile = java.io.File(scriptDir, "frida_script_${ts}.js")
         scriptFile.writeText(scriptContent)
         
-        R2PipeManager.execute(":. ${scriptFile.absolutePath}").getOrThrow()
+        executeR2Frida(":. ${scriptFile.absolutePath}").getOrThrow()
         
         val effectiveTimeoutMs = timeoutMs.coerceAtLeast(SCRIPT_POLL_INTERVAL_MS)
         var retries = ((effectiveTimeoutMs + SCRIPT_POLL_INTERVAL_MS - 1) / SCRIPT_POLL_INTERVAL_MS).toInt()
@@ -237,6 +237,13 @@ class R2FridaRepository {
             }
         }
         throw Exception("Script execution timed out after ${effectiveTimeoutMs / 1000} seconds or failed to write result file")
+    }
+
+    private suspend fun executeR2Frida(command: String): Result<String> {
+        if (!R2PipeManager.isR2FridaSession) {
+            return Result.failure(IllegalStateException("r2frida command requires an active r2frida session"))
+        }
+        return R2PipeManager.execute(command, markDirty = false)
     }
 
     private fun seekJson(raw: String): String {

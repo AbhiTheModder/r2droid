@@ -23,6 +23,9 @@ import top.wsdx233.r2droid.feature.ai.data.ChatMessage
 import top.wsdx233.r2droid.feature.ai.data.ChatRole
 import top.wsdx233.r2droid.feature.ai.data.ThinkingLevel
 import top.wsdx233.r2droid.feature.disasm.data.DisasmDataManager
+import top.wsdx233.r2droid.feature.debug.data.DebugBackend
+import top.wsdx233.r2droid.feature.debug.data.DebugCapabilities
+import top.wsdx233.r2droid.feature.debug.data.DebugSessionConfig
 import top.wsdx233.r2droid.feature.disasm.data.DisasmRepository
 import top.wsdx233.r2droid.util.R2PipeManager
 import java.util.Locale
@@ -85,7 +88,47 @@ data class MultiSelectState(
     val rangeEnd get() = maxOf(startAddr, endAddr)
 }
 
-enum class DebugStatus { IDLE, SUSPENDED, RUNNING }
+enum class DebugStatus { IDLE, STARTING, SUSPENDED, RUNNING, STOPPING, ERROR }
+
+data class DebugStackState(
+    val entries: List<top.wsdx233.r2droid.feature.debug.data.DebugStackEntry> = emptyList(),
+    val stackPointer: Long? = null,
+    val isLoading: Boolean = false
+)
+
+data class DebugMemoryState(
+    val address: Long? = null,
+    val bytes: ByteArray = ByteArray(0),
+    val isLoading: Boolean = false,
+    val error: String? = null
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is DebugMemoryState) return false
+        return address == other.address && bytes.contentEquals(other.bytes) &&
+            isLoading == other.isLoading && error == other.error
+    }
+
+    override fun hashCode(): Int {
+        var result = address?.hashCode() ?: 0
+        result = 31 * result + bytes.contentHashCode()
+        result = 31 * result + isLoading.hashCode()
+        result = 31 * result + (error?.hashCode() ?: 0)
+        return result
+    }
+}
+
+data class DebugLaunchConfigState(
+    val startAddressText: String = "",
+    val startAtCurrentSeek: Boolean = true,
+    val stackAddressText: String = "",
+    val stackSizeText: String = "0x10000",
+    val maxEsilStepsText: String = "10000",
+    val esilTimeoutMsText: String = "10000",
+    val attachPidText: String = "",
+    val gdbRemoteHostText: String = "127.0.0.1",
+    val gdbRemotePortText: String = "1234"
+)
 
 /**
  * ViewModel for Disassembly Viewer.
@@ -182,14 +225,28 @@ class DisasmViewModel @Inject constructor(
     val dataModifiedEvent: StateFlow<Long> = _dataModifiedEvent.asStateFlow()
 
     // 调试后端模式
-    private val _debugBackend = MutableStateFlow(top.wsdx233.r2droid.feature.debug.data.DebugBackend.ESIL)
-    val debugBackend: StateFlow<top.wsdx233.r2droid.feature.debug.data.DebugBackend> = _debugBackend.asStateFlow()
+    private val _debugBackend = MutableStateFlow(defaultDebugBackendForCurrentSession())
+    val debugBackend: StateFlow<DebugBackend> = _debugBackend.asStateFlow()
 
-    fun setDebugBackend(backend: top.wsdx233.r2droid.feature.debug.data.DebugBackend) {
-        if (_debugStatus.value == DebugStatus.IDLE) {
-            _debugBackend.value = backend
+    fun setDebugBackend(backend: DebugBackend) {
+        if (_debugStatus.value == DebugStatus.IDLE || _debugStatus.value == DebugStatus.ERROR) {
+            val sanitized = sanitizeDebugBackendForCurrentSession(backend)
+            _debugBackend.value = sanitized
+            _debugCapabilities.value = DebugCapabilities()
+            if (backend != sanitized) {
+                _debugError.value = backendUnavailableMessage(backend)
+                _debugStatus.value = DebugStatus.ERROR
+                return
+            }
+            if (_debugStatus.value == DebugStatus.ERROR) {
+                _debugError.value = null
+                _debugStatus.value = DebugStatus.IDLE
+            }
         }
     }
+
+    private val _debugCapabilities = MutableStateFlow(DebugCapabilities())
+    val debugCapabilities: StateFlow<DebugCapabilities> = _debugCapabilities.asStateFlow()
 
     // 当前 PC (Program Counter) 地址
     private val _pcAddress = MutableStateFlow<Long?>(null)
@@ -203,14 +260,80 @@ class DisasmViewModel @Inject constructor(
     private val _registers = MutableStateFlow<org.json.JSONObject>(org.json.JSONObject())
     val registers: StateFlow<org.json.JSONObject> = _registers.asStateFlow()
 
+    private val _debugStackState = MutableStateFlow(DebugStackState())
+    val debugStackState: StateFlow<DebugStackState> = _debugStackState.asStateFlow()
+
+    private val _debugMemoryState = MutableStateFlow(DebugMemoryState())
+    val debugMemoryState: StateFlow<DebugMemoryState> = _debugMemoryState.asStateFlow()
+
+    private val _debugTraceEntries = MutableStateFlow<List<top.wsdx233.r2droid.feature.debug.data.DebugTraceEntry>>(emptyList())
+    val debugTraceEntries: StateFlow<List<top.wsdx233.r2droid.feature.debug.data.DebugTraceEntry>> = _debugTraceEntries.asStateFlow()
+
+    private val _debugLaunchConfig = MutableStateFlow(DebugLaunchConfigState())
+    val debugLaunchConfig: StateFlow<DebugLaunchConfigState> = _debugLaunchConfig.asStateFlow()
+
+    private var lastTraceRegisters: Map<String, Long> = emptyMap()
+    private var traceIndex = 0
+
     // 调试器状态
     private val _debugStatus = MutableStateFlow(DebugStatus.IDLE)
     val debugStatus: StateFlow<DebugStatus> = _debugStatus.asStateFlow()
+
+    private val _debugError = MutableStateFlow<String?>(null)
+    val debugError: StateFlow<String?> = _debugError.asStateFlow()
+
+    fun clearDebugError() {
+        _debugError.value = null
+    }
+
+    private fun setDebugError(throwable: Throwable?) {
+        _debugError.value = throwable?.message ?: "Debug operation failed"
+        _debugStatus.value = DebugStatus.ERROR
+    }
+
+    private fun defaultDebugBackendForCurrentSession(): DebugBackend {
+        return if (R2PipeManager.isR2FridaSession) DebugBackend.FRIDA else DebugBackend.ESIL
+    }
+
+    private fun sanitizeDebugBackendForCurrentSession(backend: DebugBackend): DebugBackend {
+        return when {
+            R2PipeManager.isR2FridaSession -> DebugBackend.FRIDA
+            backend == DebugBackend.FRIDA -> DebugBackend.ESIL
+            else -> backend
+        }
+    }
+
+    private fun backendUnavailableMessage(backend: DebugBackend): String {
+        return if (backend == DebugBackend.FRIDA) {
+            "FRIDA backend requires an active r2frida session"
+        } else {
+            "${backend.displayName} debug backend is not available in an r2frida session; use Frida backend"
+        }
+    }
+
+    private fun ensureDebugBackendMatchesCurrentSession(): Boolean {
+        val current = _debugBackend.value
+        val sanitized = sanitizeDebugBackendForCurrentSession(current)
+        if (current == sanitized) return true
+        _debugBackend.value = sanitized
+        _debugCapabilities.value = DebugCapabilities()
+        _debugError.value = backendUnavailableMessage(current)
+        _debugStatus.value = DebugStatus.ERROR
+        return false
+    }
 
     private fun clearDebugState() {
         _pcAddress.value = null
         _breakpoints.value = emptySet()
         _registers.value = org.json.JSONObject()
+        _debugStackState.value = DebugStackState()
+        _debugMemoryState.value = DebugMemoryState()
+        _debugTraceEntries.value = emptyList()
+        lastTraceRegisters = emptyMap()
+        traceIndex = 0
+        _debugCapabilities.value = DebugCapabilities()
+        _debugBackend.value = defaultDebugBackendForCurrentSession()
+        _debugError.value = null
         _debugStatus.value = DebugStatus.IDLE
         _disasmCacheVersion.value++
     }
@@ -301,15 +424,52 @@ class DisasmViewModel @Inject constructor(
         }
     }
 
+    private fun parseDebugLong(raw: String): Long? {
+        val trimmed = raw.trim()
+        if (trimmed.isBlank()) return null
+        return trimmed.removePrefix("0x").removePrefix("0X").toLongOrNull(16)
+            ?: trimmed.toLongOrNull()
+    }
+
+    private fun buildDebugSessionConfig(): Result<DebugSessionConfig> = runCatching {
+        check(ensureDebugBackendMatchesCurrentSession()) { _debugError.value ?: "Debug backend is unavailable for current session" }
+        val config = _debugLaunchConfig.value
+        DebugSessionConfig(
+            backend = _debugBackend.value,
+            executablePath = R2PipeManager.currentFilePath,
+            startAddress = parseDebugLong(config.startAddressText),
+            startAtCurrentSeek = config.startAtCurrentSeek,
+            stackAddress = parseDebugLong(config.stackAddressText),
+            stackSize = parseDebugLong(config.stackSizeText) ?: 0x10000L,
+            maxEsilSteps = config.maxEsilStepsText.toIntOrNull()?.coerceAtLeast(1) ?: 10_000,
+            esilTimeoutMs = config.esilTimeoutMsText.toLongOrNull()?.coerceAtLeast(0L) ?: 10_000L,
+            attachPid = config.attachPidText.toIntOrNull()?.takeIf { it > 0 },
+            gdbRemoteHost = config.gdbRemoteHostText.trim().takeIf { it.isNotBlank() },
+            gdbRemotePort = config.gdbRemotePortText.toIntOrNull()
+        )
+    }
+
+    fun updateDebugLaunchConfig(config: DebugLaunchConfigState) {
+        _debugLaunchConfig.value = config
+    }
+
     // 开始调试（根据当前后端自动选择 ESIL / Native / Frida）
     fun startDebugging() {
+        if (_debugStatus.value == DebugStatus.STARTING || _debugStatus.value == DebugStatus.RUNNING) return
+
         viewModelScope.launch {
-            val backend = _debugBackend.value
-            val result = debuggerRepository.startDebugging(backend)
+            val config = buildDebugSessionConfig().getOrElse {
+                setDebugError(it)
+                return@launch
+            }
+            _debugStatus.value = DebugStatus.STARTING
+            _debugError.value = null
+            _debugCapabilities.value = debuggerRepository.probe(config.backend).getOrDefault(DebugCapabilities())
+            val result = debuggerRepository.start(config)
             if (result.isSuccess) {
                 updateDebugState()
             } else {
-                clearDebugState()
+                setDebugError(result.exceptionOrNull())
             }
         }
     }
@@ -318,34 +478,170 @@ class DisasmViewModel @Inject constructor(
     fun initEsil() = startDebugging()
 
     fun stopDebugging() {
-        if (_debugStatus.value == DebugStatus.RUNNING) return
+        if (_debugStatus.value == DebugStatus.RUNNING || _debugStatus.value == DebugStatus.STARTING) return
+        if (!ensureDebugBackendMatchesCurrentSession()) return
 
         viewModelScope.launch {
-            debuggerRepository.stopDebugging(_debugBackend.value)
-            clearDebugState()
+            _debugStatus.value = DebugStatus.STOPPING
+            val result = debuggerRepository.stopDebugging(_debugBackend.value)
+            if (result.isSuccess) {
+                clearDebugState()
+            } else {
+                setDebugError(result.exceptionOrNull())
+            }
         }
     }
 
     // 切换断点 (本地管理状态，不依赖R2缓存)
     fun toggleBreakpoint(addr: Long) {
-        val currentBreakpoints = _breakpoints.value.toMutableSet()
-        val isAdd = !currentBreakpoints.contains(addr)
-        
-        if (isAdd) currentBreakpoints.add(addr) else currentBreakpoints.remove(addr)
-        _breakpoints.value = currentBreakpoints
-        // Trigger UI update locally
+        if (!ensureDebugBackendMatchesCurrentSession()) return
+        val before = _breakpoints.value
+        val isAdd = !before.contains(addr)
+
+        _breakpoints.value = if (isAdd) before + addr else before - addr
         _disasmCacheVersion.value++
 
         viewModelScope.launch {
-            debuggerRepository.toggleBreakpoint(addr, isAdd) // 发送实际指令到 r2
+            val result = debuggerRepository.toggleBreakpoint(addr, isAdd)
+            if (result.isFailure) {
+                _breakpoints.value = before
+                _disasmCacheVersion.value++
+                setDebugError(result.exceptionOrNull())
+            } else {
+                debuggerRepository.getBreakpoints().getOrNull()?.let { _breakpoints.value = it }
+                _debugError.value = null
+            }
         }
+    }
+
+    fun runToCursor(addr: Long) {
+        if (_debugStatus.value == DebugStatus.RUNNING || _debugStatus.value == DebugStatus.STARTING) return
+        if (!ensureDebugBackendMatchesCurrentSession()) return
+        viewModelScope.launch {
+            val previousStatus = _debugStatus.value
+            _debugStatus.value = DebugStatus.RUNNING
+            _debugError.value = null
+            val result = debuggerRepository.runToCursor(_debugBackend.value, addr)
+            if (result.isSuccess) {
+                updateDebugState("run-to-cursor")
+            } else {
+                _debugStatus.value = previousStatus
+                setDebugError(result.exceptionOrNull())
+            }
+        }
+    }
+
+    fun setDebugPc(addr: Long) {
+        if (_debugStatus.value == DebugStatus.RUNNING || _debugStatus.value == DebugStatus.STARTING) return
+        if (!ensureDebugBackendMatchesCurrentSession()) return
+        viewModelScope.launch {
+            val result = debuggerRepository.setProgramCounter(_debugBackend.value, addr)
+            if (result.isSuccess) {
+                updateDebugState("set-pc")
+            } else {
+                setDebugError(result.exceptionOrNull())
+            }
+        }
+    }
+
+    fun resetDebugging(startAddress: Long? = _pcAddress.value) {
+        if (_debugStatus.value == DebugStatus.RUNNING || _debugStatus.value == DebugStatus.STARTING) return
+        viewModelScope.launch {
+            val config = buildDebugSessionConfig().getOrElse {
+                setDebugError(it)
+                return@launch
+            }.copy(startAddress = startAddress)
+            _debugStatus.value = DebugStatus.STARTING
+            _debugError.value = null
+            _debugCapabilities.value = debuggerRepository.probe(config.backend).getOrDefault(_debugCapabilities.value)
+            val result = debuggerRepository.reset(config)
+            if (result.isSuccess) {
+                clearDebugTrace()
+                updateDebugState("reset")
+            } else {
+                setDebugError(result.exceptionOrNull())
+            }
+        }
+    }
+
+    fun refreshDebugStack() {
+        if (_debugStatus.value == DebugStatus.IDLE || _debugStatus.value == DebugStatus.STARTING) return
+        if (!ensureDebugBackendMatchesCurrentSession()) return
+        viewModelScope.launch {
+            _debugStackState.value = _debugStackState.value.copy(isLoading = true)
+            val entries = debuggerRepository.getStack(_debugBackend.value, 16).getOrDefault(emptyList())
+            val sp = debuggerRepository.getStackPointer(_debugBackend.value).getOrNull()
+            _debugStackState.value = DebugStackState(entries = entries, stackPointer = sp, isLoading = false)
+        }
+    }
+
+    fun readDebugMemory(address: Long, size: Int = 128) {
+        if (_debugStatus.value == DebugStatus.IDLE || _debugStatus.value == DebugStatus.STARTING) return
+        if (!ensureDebugBackendMatchesCurrentSession()) return
+        viewModelScope.launch {
+            _debugMemoryState.value = _debugMemoryState.value.copy(address = address, isLoading = true, error = null)
+            val result = debuggerRepository.readMemory(_debugBackend.value, address, size)
+            _debugMemoryState.value = result.fold(
+                onSuccess = { bytes -> DebugMemoryState(address = address, bytes = bytes, isLoading = false) },
+                onFailure = { error -> DebugMemoryState(address = address, isLoading = false, error = error.message) }
+            )
+        }
+    }
+
+    fun readMemoryAtPc() {
+        _pcAddress.value?.let { readDebugMemory(it) }
+    }
+
+    fun readMemoryAtSp() {
+        _debugStackState.value.stackPointer?.let { readDebugMemory(it) }
+    }
+
+    fun clearDebugTrace() {
+        _debugTraceEntries.value = emptyList()
+        lastTraceRegisters = currentRegisterMap()
+        traceIndex = 0
+    }
+
+    private fun currentRegisterMap(): Map<String, Long> {
+        val json = _registers.value
+        val map = mutableMapOf<String, Long>()
+        json.keys().forEach { key ->
+            when (val value = json.opt(key)) {
+                is Number -> map[key] = value.toLong()
+                is String -> value.removePrefix("0x").removePrefix("0X").toLongOrNull(16)?.let { map[key] = it }
+            }
+        }
+        return map
+    }
+
+    private fun appendDebugTrace(action: String, pc: Long?, reason: String? = null) {
+        val current = currentRegisterMap()
+        val changed = current.mapNotNull { (name, value) ->
+            val previous = lastTraceRegisters[name]
+            if (previous != null && previous != value) name to (previous to value) else null
+        }.toMap()
+        lastTraceRegisters = current
+        val tracePc = pc ?: _pcAddress.value ?: return
+        traceIndex += 1
+        val next = (_debugTraceEntries.value + top.wsdx233.r2droid.feature.debug.data.DebugTraceEntry(
+            index = traceIndex,
+            pc = tracePc,
+            action = action,
+            changedRegisters = changed,
+            reason = reason
+        )).takeLast(200)
+        _debugTraceEntries.value = next
     }
 
     // 调试操作 (Step / Continue)
     fun performDebugAction(action: String) {
+        if (_debugStatus.value == DebugStatus.RUNNING || _debugStatus.value == DebugStatus.STARTING) return
+        if (!ensureDebugBackendMatchesCurrentSession()) return
+
         viewModelScope.launch {
             val previousStatus = _debugStatus.value
             _debugStatus.value = DebugStatus.RUNNING
+            _debugError.value = null
 
             val result = when (action) {
                 "step" -> debuggerRepository.stepInto(_debugBackend.value)
@@ -356,35 +652,58 @@ class DisasmViewModel @Inject constructor(
 
             if (result.isSuccess) {
                 // 阻塞命令返回后，更新状态
-                updateDebugState()
+                updateDebugState(action)
             } else {
                 _debugStatus.value = previousStatus
+                setDebugError(result.exceptionOrNull())
             }
         }
     }
 
     // 暂停执行
     fun pauseExecution() {
-        // 利用已有的 interrupt 发送 SIGINT 给 R2 进程，强行打断 dc 的阻塞
+        if (!ensureDebugBackendMatchesCurrentSession()) return
+        // 利用已有的 interrupt 发送 SIGINT 给 R2 进程，强行打断 dc/aec 的阻塞
         R2PipeManager.interrupt()
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(150L)
+            val result = debuggerRepository.pause()
+            if (result.isSuccess) {
+                updateDebugState("pause")
+            } else {
+                setDebugError(result.exceptionOrNull())
+            }
+        }
     }
 
     // 获取 PC 和 寄存器更新 UI，并自动滚动到 PC 位置
-    suspend fun updateDebugState() {
+    suspend fun updateDebugState(traceAction: String? = null) {
+        if (!ensureDebugBackendMatchesCurrentSession()) return
         val backend = _debugBackend.value
-        val pc = debuggerRepository.getCurrentPC(backend).getOrNull()
-        val regs = debuggerRepository.getRegisters(backend).getOrNull()
+        val pcResult = debuggerRepository.getCurrentPC(backend)
+        val regsResult = debuggerRepository.getRegisters(backend)
+        val pc = pcResult.getOrNull()
+        val regs = regsResult.getOrNull()
 
         if (pc == null && regs == null) {
-            clearDebugState()
+            setDebugError(pcResult.exceptionOrNull() ?: regsResult.exceptionOrNull())
             return
         }
 
         _pcAddress.value = pc
         _debugStatus.value = DebugStatus.SUSPENDED
+        _debugError.value = null
 
         _registers.value = regs ?: org.json.JSONObject()
         debuggerRepository.getBreakpoints().getOrNull()?.let { _breakpoints.value = it }
+        refreshDebugStack()
+        pc?.let { readDebugMemory(it) }
+
+        if (traceAction != null) {
+            appendDebugTrace(traceAction, pc)
+        } else if (lastTraceRegisters.isEmpty()) {
+            lastTraceRegisters = currentRegisterMap()
+        }
 
         // 自动让反汇编视图滚动到 PC 位置
         if (pc != null) {

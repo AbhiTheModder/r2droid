@@ -259,13 +259,23 @@ class R2FridaViewModel @Inject constructor(
         }
     }
 
+    private fun hasR2FridaSession(): Boolean {
+        val available = R2PipeManager.isR2FridaSession
+        if (!available) {
+            Log.w(TAG, "Ignoring r2frida request without active r2frida session")
+        }
+        return available
+    }
+
     fun loadOverview() {
+        if (!hasR2FridaSession()) return
         viewModelScope.launch {
             repo.getOverview().onSuccess { _overview.value = it }
         }
     }
 
     fun loadLibraries(force: Boolean = false) {
+        if (!hasR2FridaSession()) return
         if (!force && _libraries.value != null) return
         viewModelScope.launch {
             repo.getLibraries().onSuccess { _libraries.value = it }
@@ -274,6 +284,7 @@ class R2FridaViewModel @Inject constructor(
     }
 
     fun loadEntries(force: Boolean = false) {
+        if (!hasR2FridaSession()) return
         if (!force && _entries.value != null) return
         viewModelScope.launch {
             repo.getEntries().onSuccess { _entries.value = it }
@@ -282,6 +293,7 @@ class R2FridaViewModel @Inject constructor(
     }
 
     fun loadExports(force: Boolean = false) {
+        if (!hasR2FridaSession()) return
         if (!force && _exports.value != null) return
         viewModelScope.launch(Dispatchers.IO) {
             repo.getExports().onSuccess { list ->
@@ -299,6 +311,7 @@ class R2FridaViewModel @Inject constructor(
     }
 
     fun loadStrings(force: Boolean = false) {
+        if (!hasR2FridaSession()) return
         if (!force && _strings.value != null) return
         viewModelScope.launch {
             repo.getStrings().onSuccess { _strings.value = it }
@@ -307,6 +320,7 @@ class R2FridaViewModel @Inject constructor(
     }
 
     fun loadSymbols(force: Boolean = false) {
+        if (!hasR2FridaSession()) return
         if (!force && _symbols.value != null) return
         viewModelScope.launch {
             repo.getSymbols().onSuccess { _symbols.value = it }
@@ -315,6 +329,7 @@ class R2FridaViewModel @Inject constructor(
     }
 
     fun loadSections(force: Boolean = false) {
+        if (!hasR2FridaSession()) return
         if (!force && _sections.value != null) return
         viewModelScope.launch {
             repo.getSections().onSuccess { _sections.value = it }
@@ -323,6 +338,7 @@ class R2FridaViewModel @Inject constructor(
     }
 
     fun loadMappings(force: Boolean = false) {
+        if (!hasR2FridaSession()) return
         if (!force && _mappings.value != null) return
         viewModelScope.launch {
             repo.getMappings().onSuccess { _mappings.value = it }
@@ -350,6 +366,7 @@ class R2FridaViewModel @Inject constructor(
     }
 
     fun loadCustomFunctions(force: Boolean = false) {
+        if (!hasR2FridaSession()) return
         if (!force && _customFunctions.value != null) return
         viewModelScope.launch(Dispatchers.IO) {
             repo.getCustomFunctions(context.cacheDir.absolutePath, getPublicExchangeDir()).onSuccess { list ->
@@ -402,6 +419,7 @@ class R2FridaViewModel @Inject constructor(
      * @param rangeMax max value for range mode (empty = not range)
      */
     fun performSearch(input: String, rangeMin: String = "", rangeMax: String = "") {
+        if (!hasR2FridaSession()) return
         viewModelScope.launch(Dispatchers.IO) {
             _isSearching.value = true
             _searchError.value = null
@@ -452,6 +470,7 @@ class R2FridaViewModel @Inject constructor(
         rangeMin: String = "", rangeMax: String = "",
         expression: String = ""
     ) {
+        if (!hasR2FridaSession()) return
         val current = _searchResults.value ?: return
         val addrs = current.map { it.address }
         val oldValues = current.map { it.value }
@@ -486,6 +505,7 @@ class R2FridaViewModel @Inject constructor(
 
     /** Write a new value to a single address. */
     fun writeValue(address: String, value: String) {
+        if (!hasR2FridaSession()) return
         viewModelScope.launch(Dispatchers.IO) {
             val typeStr = when (_searchValueType.value) {
                 SearchValueType.BYTE -> "u8"
@@ -508,6 +528,7 @@ class R2FridaViewModel @Inject constructor(
 
     /** Batch write the same value to all current results. */
     fun batchWriteAll(value: String) {
+        if (!hasR2FridaSession()) return
         val addrs = _searchResults.value?.map { it.address } ?: return
         viewModelScope.launch(Dispatchers.IO) {
             val typeStr = when (_searchValueType.value) {
@@ -550,6 +571,7 @@ class R2FridaViewModel @Inject constructor(
     }
 
     private fun startFreezeLoop() {
+        if (!hasR2FridaSession()) return
         freezeJob = viewModelScope.launch(Dispatchers.IO) {
             while (true) {
                 val frozen = _frozenAddresses.value
@@ -581,6 +603,7 @@ class R2FridaViewModel @Inject constructor(
 
     /** Re-read current values at all result addresses. */
     fun refreshSearchValues() {
+        if (!hasR2FridaSession()) return
         val current = _searchResults.value ?: return
         if (current.isEmpty()) return
         val addrs = current.map { it.address }
@@ -638,6 +661,7 @@ class R2FridaViewModel @Inject constructor(
     }
 
     fun startMonitor(monitorId: String) {
+        if (!hasR2FridaSession()) return
         val mon = _monitors.value.find { it.id == monitorId } ?: return
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -689,6 +713,7 @@ class R2FridaViewModel @Inject constructor(
     }
 
     fun stopMonitor(monitorId: String) {
+        if (!hasR2FridaSession()) return
         viewModelScope.launch(Dispatchers.IO) {
             _monitors.value = _monitors.value.map {
                 if (it.id == monitorId) it.copy(isActive = false) else it
@@ -707,6 +732,7 @@ class R2FridaViewModel @Inject constructor(
     }
 
     fun loadRebasedStaticProject(projectScriptPath: String, moduleBaseHex: String) {
+        if (!hasR2FridaSession()) return
         viewModelScope.launch(Dispatchers.IO) {
             _staticProjectLoadState.value = StaticProjectLoadState.Loading
             runCatching {
@@ -785,6 +811,7 @@ class R2FridaViewModel @Inject constructor(
     }
 
     fun runScript(script: String) {
+        if (!hasR2FridaSession()) return
         _scriptContent.value = script
         viewModelScope.launch {
             _scriptRunning.value = true

@@ -23,7 +23,8 @@ fun ProjectDetailView(
     viewModel: ProjectViewModel = hiltViewModel(),
     hexViewModel: HexViewModel = hiltViewModel(),
     disasmViewModel: DisasmViewModel = hiltViewModel(),
-    tabIndex: Int
+    tabIndex: Int,
+    onNavigateToR2Frida: (() -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val state = uiState as? ProjectUiState.Success ?: return
@@ -96,7 +97,8 @@ fun ProjectDetailView(
                     viewModel = disasmViewModel,
                     cursorAddress = state.cursorAddress,
                     scrollToSelectionTrigger = viewModel.scrollToSelectionTrigger,
-                    onInstructionClick = { addr -> viewModel.onEvent(ProjectEvent.UpdateCursor(addr)) }
+                    onInstructionClick = { addr -> viewModel.onEvent(ProjectEvent.UpdateCursor(addr)) },
+                    onNavigateToR2Frida = onNavigateToR2Frida
                 )
             }
         }

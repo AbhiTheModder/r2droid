@@ -1212,7 +1212,11 @@ fun ProjectScaffold(
                                     viewModel = viewModel,
                                     hexViewModel = hexViewModel,
                                     disasmViewModel = disasmViewModel,
-                                    tabIndex = selectedDetailTabIndex
+                                    tabIndex = selectedDetailTabIndex,
+                                    onNavigateToR2Frida = {
+                                        selectBuiltinCategory(MainCategory.R2Frida)
+                                        selectedR2FridaTabIndex = 0
+                                    }
                                 )
                             } else {
                                 val pluginTab = pluginDetailTabs.getOrNull(selectedDetailTabIndex - baseDetailTabs.size)
